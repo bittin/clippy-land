@@ -124,6 +124,9 @@ pub fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Action<Messa
         Message::RemoveHistory(index) => {
             let _ = app.history.remove(index);
         }
+        Message::ClearHistory => {
+            app.history.clear();
+        }
         Message::TogglePopup => {
             return if let Some(p) = app.popup.take() {
                 destroy_popup(p)
@@ -277,5 +280,25 @@ mod tests {
             "fresh-entry"
         );
         assert!(!app.history.iter().any(|it| item_text(it) == "item-29"));
+    }
+
+    #[test]
+    fn clear_history_removes_all_entries() {
+        let mut app = AppModel::default();
+        app.history.push_back(text_item("pinned", true));
+        app.history.push_back(text_item("regular", false));
+
+        let _ = update(&mut app, Message::ClearHistory);
+
+        assert!(app.history.is_empty());
+    }
+
+    #[test]
+    fn clear_history_is_safe_for_empty_history() {
+        let mut app = AppModel::default();
+
+        let _ = update(&mut app, Message::ClearHistory);
+
+        assert!(app.history.is_empty());
     }
 }

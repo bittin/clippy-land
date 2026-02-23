@@ -16,10 +16,10 @@ pub fn view(app: &AppModel) -> Element<'_, Message> {
 }
 
 pub fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
-    let mut content = widget::list_column().padding([8, 0]).spacing(0);
+    let mut history_content = widget::list_column().padding([8, 0]).spacing(0);
 
     if app.history.is_empty() {
-        content = content.add(widget::text::body(fl!("empty")));
+        history_content = history_content.add(widget::text::body(fl!("empty")));
     } else {
         for (idx, item) in app.history.iter().enumerate() {
             let label: Element<'_, Message> = match &item.entry {
@@ -73,7 +73,7 @@ pub fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
                 .on_press(Message::RemoveHistory(idx))
                 .extra_small()
                 .width(Length::Shrink);
-            content = content.add(
+            history_content = history_content.add(
                 widget::row::Row::new()
                     .spacing(8)
                     .padding([4, 0])
@@ -87,17 +87,36 @@ pub fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
     }
 
     // Add a fixed height with scrolling when there are many items
-    let content = if app.history.len() > 5 {
-        widget::scrollable(content)
+    let history_content = if app.history.len() > 5 {
+        widget::scrollable(history_content)
             .width(Length::Fill)
             .height(Length::Fixed(400.0))
     } else {
-        widget::scrollable(content)
+        widget::scrollable(history_content)
             .width(Length::Fill)
             .height(Length::Shrink)
     };
 
-    let content = widget::container(content).padding([8, 8]);
+    let delete_all_button = widget::button::destructive(fl!("delete-all"))
+        .leading_icon(icons::remove_icon())
+        .on_press(Message::ClearHistory)
+        .width(Length::Fill);
+
+    let controls_sheet = widget::container(delete_all_button)
+        .padding([8, 8])
+        .class(cosmic::theme::Container::List)
+        .width(Length::Fill);
+
+    let history_sheet = widget::container(history_content)
+        .padding([8, 8])
+        .class(cosmic::theme::Container::List)
+        .width(Length::Fill);
+
+    let content = widget::column::Column::new()
+        .spacing(8)
+        .padding([8, 8])
+        .push(history_sheet)
+        .push(controls_sheet);
 
     app.core.applet.popup_container(content).into()
 }

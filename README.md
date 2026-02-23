@@ -12,6 +12,7 @@ Main features:
 - Keep a history of the latest **30** clipboard entries (text + images)
 - Re-copy an entry with a single click
 - Remove individual entries from the history
+- Clear all entries from history with one click
 - Pin important entries to the top of the history (5 pinned entries max)
 
 ## Dependencies

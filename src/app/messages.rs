@@ -9,5 +9,6 @@ pub enum Message {
     ClipboardChanged(clipboard::ClipboardEntry),
     TogglePin(usize),
     RemoveHistory(usize),
+    ClearHistory,
     CopyFromHistory(usize),
 }

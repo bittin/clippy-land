@@ -164,3 +164,118 @@ fn should_ignore_clipboard_entry(entry: &str) -> bool {
 
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn text_entry(text: &str) -> clipboard::ClipboardEntry {
+        clipboard::ClipboardEntry::Text(text.to_string())
+    }
+
+    fn text_item(text: &str, pinned: bool) -> HistoryItem {
+        HistoryItem {
+            entry: text_entry(text),
+            pinned,
+        }
+    }
+
+    fn item_text(item: &HistoryItem) -> &str {
+        match &item.entry {
+            clipboard::ClipboardEntry::Text(text) => text,
+            clipboard::ClipboardEntry::Image { .. } => {
+                panic!("expected text entry in handler tests")
+            }
+        }
+    }
+
+    #[test]
+    fn ignores_empty_and_short_numericish_entries() {
+        assert!(should_ignore_clipboard_entry(""));
+        assert!(should_ignore_clipboard_entry("  \n\t  "));
+        assert!(should_ignore_clipboard_entry("12-34"));
+        assert!(should_ignore_clipboard_entry("1,2,3"));
+    }
+
+    #[test]
+    fn keeps_nontrivial_entries() {
+        assert!(!should_ignore_clipboard_entry("123456789"));
+        assert!(!should_ignore_clipboard_entry("abc123"));
+        assert!(!should_ignore_clipboard_entry("42 is the answer"));
+    }
+
+    #[test]
+    fn clipboard_changed_dedupes_and_preserves_pin_state() {
+        let repeated = text_entry("repeat");
+        let mut app = AppModel::default();
+        app.history.push_back(text_item("front", false));
+        app.history.push_back(HistoryItem {
+            entry: repeated.clone(),
+            pinned: true,
+        });
+        app.history.push_back(text_item("tail", false));
+
+        let _ = update(&mut app, Message::ClipboardChanged(repeated.clone()));
+
+        let matches = app.history.iter().filter(|it| it.entry == repeated).count();
+        assert_eq!(matches, 1);
+
+        let idx = app
+            .history
+            .iter()
+            .position(|it| it.entry == repeated)
+            .expect("entry should still exist");
+        assert!(app.history[idx].pinned);
+    }
+
+    #[test]
+    fn toggling_pinned_item_moves_it_after_pinned_section() {
+        let mut app = AppModel::default();
+        app.history.push_back(text_item("a", true));
+        app.history.push_back(text_item("b", true));
+        app.history.push_back(text_item("c", false));
+
+        let _ = update(&mut app, Message::TogglePin(0));
+
+        assert!(app.history[0].pinned);
+        assert_eq!(item_text(&app.history[0]), "b");
+        assert!(!app.history[1].pinned);
+        assert_eq!(item_text(&app.history[1]), "a");
+    }
+
+    #[test]
+    fn toggle_pin_respects_max_pinned_limit() {
+        let mut app = AppModel::default();
+        for i in 0..MAX_PINNED {
+            app.history.push_back(text_item(&format!("pin-{i}"), true));
+        }
+        app.history.push_back(text_item("unpinned", false));
+
+        let _ = update(&mut app, Message::TogglePin(MAX_PINNED));
+
+        assert_eq!(pinned_count(&app.history), MAX_PINNED);
+        assert_eq!(item_text(&app.history[MAX_PINNED]), "unpinned");
+        assert!(!app.history[MAX_PINNED].pinned);
+    }
+
+    #[test]
+    fn clipboard_changed_trims_to_max_history() {
+        let mut app = AppModel::default();
+        for i in 0..MAX_HISTORY {
+            app.history
+                .push_back(text_item(&format!("item-{i}"), false));
+        }
+
+        let _ = update(
+            &mut app,
+            Message::ClipboardChanged(text_entry("fresh-entry")),
+        );
+
+        assert_eq!(app.history.len(), MAX_HISTORY);
+        assert_eq!(
+            item_text(app.history.front().expect("front entry exists")),
+            "fresh-entry"
+        );
+        assert!(!app.history.iter().any(|it| item_text(it) == "item-29"));
+    }
+}

@@ -4,7 +4,7 @@ use std::io::{Cursor, Read};
 
 use wl_clipboard_rs::{
     copy::{MimeType as CopyMimeType, Options as CopyOptions, Source},
-    paste::{get_contents, ClipboardType, MimeType as PasteMimeType, Seat},
+    paste::{ClipboardType, MimeType as PasteMimeType, Seat, get_contents},
 };
 
 const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
@@ -225,6 +225,125 @@ pub fn write_clipboard_image(mime: &str, bytes: &[u8]) -> bool {
                 eprintln!("[clippy-land] clipboard image write error: {err:?}");
             }
             false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn image_entry(
+        mime: &str,
+        bytes: Vec<u8>,
+        hash: u64,
+        thumbnail_png: Option<Vec<u8>>,
+    ) -> ClipboardEntry {
+        ClipboardEntry::Image {
+            mime: mime.to_string(),
+            bytes,
+            hash,
+            thumbnail_png,
+        }
+    }
+
+    #[test]
+    fn text_fingerprint_matches_text_content() {
+        let entry = ClipboardEntry::Text("hello".to_string());
+        assert_eq!(
+            entry.fingerprint(),
+            ClipboardFingerprint::Text("hello".to_string())
+        );
+    }
+
+    #[test]
+    fn image_fingerprint_tracks_mime_hash_and_length() {
+        let entry = image_entry("image/png", vec![1, 2, 3, 4], 99, None);
+        assert_eq!(
+            entry.fingerprint(),
+            ClipboardFingerprint::Image {
+                mime: "image/png".to_string(),
+                bytes_len: 4,
+                hash: 99,
+            }
+        );
+    }
+
+    #[test]
+    fn image_equality_uses_hash_mime_and_length() {
+        let a = image_entry("image/png", vec![1, 2, 3], 7, None);
+        let b = image_entry("image/png", vec![9, 8, 7], 7, Some(vec![0, 1, 2]));
+        let c = image_entry("image/png", vec![9, 8], 7, None);
+        let d = image_entry("image/png", vec![9, 8, 7], 8, None);
+
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+        assert_ne!(a, d);
+    }
+
+    fn wayland_tests_enabled() -> bool {
+        std::env::var("CLIPPY_LAND_RUN_WAYLAND_TESTS")
+            .map(|v| v == "1")
+            .unwrap_or(false)
+            && std::env::var_os("WAYLAND_DISPLAY").is_some()
+            && std::env::var_os("XDG_RUNTIME_DIR").is_some()
+    }
+
+    fn read_text_with_retry(expected: &str, retries: usize) -> bool {
+        for _ in 0..retries {
+            if read_clipboard_text().as_deref() == Some(expected) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        false
+    }
+
+    fn read_image_with_retry(retries: usize) -> Option<ClipboardEntry> {
+        for _ in 0..retries {
+            if let Some(entry) = read_clipboard_image() {
+                return Some(entry);
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        None
+    }
+
+    #[test]
+    #[ignore = "requires CLIPPY_LAND_RUN_WAYLAND_TESTS=1 and a live Wayland session"]
+    fn wayland_clipboard_text_round_trip() {
+        if !wayland_tests_enabled() {
+            return;
+        }
+
+        let text = "clippy-land-wayland-text";
+        assert!(write_clipboard_text(text));
+        assert!(read_text_with_retry(text, 20));
+    }
+
+    #[test]
+    #[ignore = "requires CLIPPY_LAND_RUN_WAYLAND_TESTS=1 and a live Wayland session"]
+    fn wayland_clipboard_image_round_trip() {
+        if !wayland_tests_enabled() {
+            return;
+        }
+
+        let img = image::RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255]));
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+            .expect("test image encoding should work");
+
+        assert!(write_clipboard_image("image/png", &png));
+
+        let read = read_image_with_retry(20).expect("clipboard image should be readable");
+        match read {
+            ClipboardEntry::Image { mime, bytes, .. } => {
+                assert_eq!(mime, "image/png");
+                assert_eq!(bytes, png);
+            }
+            ClipboardEntry::Text(_) => panic!("expected image entry"),
         }
     }
 }

@@ -1,9 +1,9 @@
-use super::{icons, AppModel, Message};
+use super::{AppModel, Message, icons};
 use crate::fl;
 use crate::services::clipboard;
 use cosmic::applet::menu_button;
 use cosmic::iced::widget::image::Handle as ImageHandle;
-use cosmic::iced::{window::Id, Alignment, Length};
+use cosmic::iced::{Alignment, Length, window::Id};
 use cosmic::prelude::*;
 use cosmic::widget;
 
@@ -116,4 +116,26 @@ fn summarize_one_line(text: &str) -> String {
         line.push('…');
     }
     line
+}
+
+#[cfg(test)]
+mod tests {
+    use super::summarize_one_line;
+
+    #[test]
+    fn summarizes_first_nonempty_line() {
+        let input = "\n   \n  hello world  \nsecond line";
+        assert_eq!(summarize_one_line(input), "hello world");
+    }
+
+    #[test]
+    fn truncates_long_lines_with_ellipsis() {
+        let input = "abcdefghijklmnopqrstuvwxyz";
+        assert_eq!(summarize_one_line(input), "abcdefghijklmnopqrstuvwx…");
+    }
+
+    #[test]
+    fn returns_empty_for_blank_text() {
+        assert_eq!(summarize_one_line("\n  \n\t"), "");
+    }
 }

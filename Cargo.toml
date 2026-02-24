@@ -1,9 +1,11 @@
 [package]
 name = "cosmic-applet-clippy-land"
-version = "0.2.0"
+version = "0.2.1"
+authors = ["k33wee (https://github.com/k33wee)"]
 edition = "2024"
-license = "MIT"
+license = "GPL-3.0-or-later"
 description = "Clipboard history applet for COSMIC"
+
 
 [dependencies]
 futures-util = "0.3.31"

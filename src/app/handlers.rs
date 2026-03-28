@@ -4,6 +4,7 @@ use crate::services::clipboard;
 use cosmic::iced::Subscription;
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
 use cosmic::prelude::*;
+use cosmic::iced::futures::channel::mpsc;
 use futures_util::SinkExt;
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -14,35 +15,37 @@ const MAX_PINNED: usize = 5;
 pub fn subscription(_app: &AppModel) -> Subscription<Message> {
     struct ClipboardSubscription;
 
-    Subscription::batch(vec![Subscription::run_with_id(
+    Subscription::batch(vec![Subscription::run_with(
         std::any::TypeId::of::<ClipboardSubscription>(),
-        cosmic::iced::stream::channel(1, move |mut channel| async move {
-            let mut last_seen: Option<clipboard::ClipboardFingerprint> = None;
+        |_| {
+            cosmic::iced::stream::channel(1, move |mut channel: mpsc::Sender<Message>| async move {
+                let mut last_seen: Option<clipboard::ClipboardFingerprint> = None;
 
-            loop {
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                loop {
+                    tokio::time::sleep(Duration::from_millis(500)).await;
 
-                let next = tokio::task::spawn_blocking(clipboard::read_clipboard_entry)
-                    .await
-                    .ok()
-                    .flatten();
+                    let next = tokio::task::spawn_blocking(clipboard::read_clipboard_entry)
+                        .await
+                        .ok()
+                        .flatten();
 
-                let Some(next) = next else {
-                    continue;
-                };
+                    let Some(next) = next else {
+                        continue;
+                    };
 
-                let next_fp = next.fingerprint();
-                if last_seen.as_ref() == Some(&next_fp) {
-                    continue;
+                    let next_fp = next.fingerprint();
+                    if last_seen.as_ref() == Some(&next_fp) {
+                        continue;
+                    }
+
+                    last_seen = Some(next_fp);
+
+                    if channel.send(Message::ClipboardChanged(next)).await.is_err() {
+                        break;
+                    }
                 }
-
-                last_seen = Some(next_fp);
-
-                if channel.send(Message::ClipboardChanged(next)).await.is_err() {
-                    break;
-                }
-            }
-        }),
+            })
+        },
     )])
 }
 
@@ -119,6 +122,11 @@ pub fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Action<Messa
                         _ = clipboard::write_clipboard_image(mime, bytes);
                     }
                 }
+            }
+            if let Some(p) = app.popup.take() {
+                app.hovered_index = None;
+                app.at_scroll_bottom = false;
+                return destroy_popup(p);
             }
         }
         Message::RemoveHistory(index) => {
@@ -305,5 +313,16 @@ mod tests {
         let _ = update(&mut app, Message::ClearHistory);
 
         assert!(app.history.is_empty());
+    }
+
+    #[test]
+    fn selecting_entry_closes_popup() {
+        let mut app = AppModel::default();
+        app.popup = Some(cosmic::iced::window::Id::unique());
+        app.history.push_back(text_item("copy me", false));
+
+        let _ = update(&mut app, Message::CopyFromHistory(0));
+
+        assert!(app.popup.is_none());
     }
 }

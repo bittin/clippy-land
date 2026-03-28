@@ -1,7 +1,6 @@
 use super::{AppModel, Message, icons};
 use crate::fl;
 use crate::services::clipboard;
-use cosmic::iced::widget::Stack;
 use cosmic::iced::widget::image::Handle as ImageHandle;
 use cosmic::iced::{Alignment, Length, window::Id};
 use cosmic::prelude::*;
@@ -23,7 +22,11 @@ pub fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
     let mut history_column = widget::column::Column::new().spacing(4);
 
     if app.history.is_empty() {
-        history_column = history_column.push(widget::text::body(fl!("empty")));
+        history_column = history_column.push(
+            widget::container(widget::text::body(fl!("empty")))
+                .width(Length::Fill)
+                .center_x(Length::Fill),
+        );
     } else {
         let pinned_count = app.history.iter().filter(|it| it.pinned).count();
 
@@ -32,8 +35,6 @@ pub fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
             if idx == pinned_count && pinned_count > 0 && pinned_count < app.history.len() {
                 history_column = history_column.push(widget::divider::horizontal::default());
             }
-
-            let is_hovered = app.hovered_index == Some(idx);
 
             let label: Element<'_, Message> = match &item.entry {
                 clipboard::ClipboardEntry::Text(text) => {
@@ -48,6 +49,7 @@ pub fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
                     let thumb = thumbnail_png.as_ref().map(|png| {
                         widget::image(ImageHandle::from_bytes(png.clone()))
                             .width(Length::Fill)
+                            .height(Length::Fixed(240.0))
                             .content_fit(cosmic::iced::ContentFit::Contain)
                     });
 
@@ -57,7 +59,7 @@ pub fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
                     if let Some(thumb) = thumb {
                         col = col.push(thumb);
                     }
-                    if is_hovered {
+                    if app.hovered_index == Some(idx) {
                         col = col.push(
                             widget::text::caption(format!(
                                 "{} ({} KB)",
@@ -77,57 +79,68 @@ pub fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
                 .width(Length::Fill)
                 .padding([8, 12]);
 
-            let entry: Element<'_, Message> = if is_hovered {
-                let pin_button = widget::button::icon(if item.pinned {
-                    icons::pin_icon_pinned()
-                } else {
-                    icons::pin_icon(icon_color)
-                })
-                .tooltip(if item.pinned {
-                    fl!("unpin")
-                } else {
-                    fl!("pin")
-                })
-                .on_press(Message::TogglePin(idx))
+            let pin_button = widget::button::icon(if item.pinned {
+                icons::pin_icon_pinned()
+            } else {
+                icons::pin_icon(icon_color)
+            })
+            .tooltip(if item.pinned {
+                fl!("unpin")
+            } else {
+                fl!("pin")
+            })
+            .on_press(Message::TogglePin(idx))
+            .extra_small()
+            .width(Length::Shrink);
+
+            let remove_button = widget::button::icon(icons::remove_icon(icon_color))
+                .tooltip(fl!("remove"))
+                .on_press(Message::RemoveHistory(idx))
                 .extra_small()
                 .width(Length::Shrink);
 
-                let remove_button = widget::button::icon(icons::remove_icon(icon_color))
-                    .tooltip(fl!("remove"))
-                    .on_press(Message::RemoveHistory(idx))
-                    .extra_small()
-                    .width(Length::Shrink);
+            let actions = widget::column::Column::new()
+                .spacing(2)
+                .align_x(Alignment::Center)
+                .push(pin_button)
+                .push(remove_button);
 
-                let actions_overlay = widget::row::Row::new()
-                    .push(widget::horizontal_space())
-                    .push(pin_button)
-                    .push(remove_button)
-                    .spacing(2)
-                    .padding([0, 4])
-                    .align_y(Alignment::Center);
+            let entry = widget::row::Row::new()
+                .push(copy_button)
+                .push(
+                    widget::container(actions)
+                        .width(Length::Fixed(40.0))
+                        .padding([0, 2]),
+                )
+                .align_y(Alignment::Center)
+                .width(Length::Fill);
 
-                Stack::with_children(vec![copy_button.into(), actions_overlay.into()])
-                    .width(Length::Fill)
+            let is_image_entry = matches!(&item.entry, clipboard::ClipboardEntry::Image { .. });
+            let card_content: Element<'_, Message> = if is_image_entry {
+                widget::mouse_area(entry)
+                    .on_enter(Message::HoverEntry(Some(idx)))
+                    .on_exit(Message::HoverEntry(None))
                     .into()
             } else {
-                copy_button.into()
+                entry.into()
             };
 
             history_column = history_column.push(
-                widget::container(
-                    widget::mouse_area(entry)
-                        .on_enter(Message::HoverEntry(Some(idx)))
-                        .on_exit(Message::HoverEntry(None)),
-                )
-                .class(cosmic::theme::Container::Card)
-                .width(Length::Fill),
+                widget::container(card_content)
+                    .class(cosmic::theme::Container::Card)
+                    .width(Length::Fill),
             );
         }
     }
 
     // Grow with content up to 400 px, then scroll.
     let history_scrollable = widget::container(
-        widget::scrollable(history_column).width(Length::Fill),
+        widget::scrollable(
+            widget::container(history_column)
+                .padding([0, 12, 0, 12])
+                .width(Length::Fill),
+        )
+        .width(Length::Fill),
     )
     .max_height(400.0)
     .width(Length::Fill);
@@ -136,20 +149,22 @@ pub fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
     // which is the inverse of the neutral-background icon color.
     let destructive_icon_color = if is_dark { "#2e3436" } else { "#dcdcdc" };
 
-    let delete_all_button = widget::button::destructive(fl!("delete-all"))
-        .leading_icon(icons::remove_icon(destructive_icon_color))
-        .on_press(Message::ClearHistory);
-
-    let controls_sheet = widget::container(delete_all_button)
-        .padding([8, 8])
-        .align_x(Alignment::End)
-        .width(Length::Fill);
-
-    let content = widget::column::Column::new()
+    let mut content = widget::column::Column::new()
         .spacing(8)
         .padding([8, 8])
-        .push(history_scrollable)
-        .push(controls_sheet);
+        .push(history_scrollable);
+
+    if !app.history.is_empty() {
+        let delete_all_button = widget::button::destructive(fl!("delete-all"))
+            .leading_icon(icons::remove_icon(destructive_icon_color))
+            .on_press(Message::ClearHistory);
+
+        let controls_sheet = widget::container(delete_all_button)
+            .padding([8, 8])
+            .align_x(Alignment::End)
+            .width(Length::Fill);
+        content = content.push(controls_sheet);
+    }
 
     app.core.applet.popup_container(content).into()
 }

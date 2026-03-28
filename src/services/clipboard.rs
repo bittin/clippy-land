@@ -1,6 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::{Cursor, Read};
+use std::path::{Path, PathBuf};
 
 use wl_clipboard_rs::{
     copy::{MimeType as CopyMimeType, Options as CopyOptions, Source},
@@ -75,7 +76,9 @@ pub enum ClipboardFingerprint {
 }
 
 pub fn read_clipboard_entry() -> Option<ClipboardEntry> {
-    read_clipboard_image().or_else(|| read_clipboard_text().map(ClipboardEntry::Text))
+    read_clipboard_image()
+        .or_else(read_clipboard_image_from_uri_list)
+        .or_else(|| read_clipboard_text().map(ClipboardEntry::Text))
 }
 
 pub fn read_clipboard_text() -> Option<String> {
@@ -169,6 +172,105 @@ pub fn read_clipboard_image() -> Option<ClipboardEntry> {
     None
 }
 
+fn read_clipboard_image_from_uri_list() -> Option<ClipboardEntry> {
+    let result = get_contents(
+        ClipboardType::Regular,
+        Seat::Unspecified,
+        PasteMimeType::Specific("text/uri-list"),
+    );
+
+    let (mut pipe, _) = result.ok()?;
+    let mut bytes = Vec::new();
+    if pipe.read_to_end(&mut bytes).is_err() {
+        return None;
+    }
+
+    let uris = String::from_utf8(bytes).ok()?;
+    let path = parse_first_local_path_from_uri_list(&uris)?;
+    clipboard_entry_from_image_path(&path)
+}
+
+fn parse_first_local_path_from_uri_list(uri_list: &str) -> Option<PathBuf> {
+    for line in uri_list.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some(path) = path_from_file_uri(trimmed) {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn path_from_file_uri(uri: &str) -> Option<PathBuf> {
+    let without_scheme = uri.strip_prefix("file://")?;
+    let path_part = without_scheme.split(['\r', '\n']).next()?.trim();
+    if path_part.is_empty() {
+        return None;
+    }
+    percent_decode_to_path(path_part)
+}
+
+fn percent_decode_to_path(input: &str) -> Option<PathBuf> {
+    let mut out = Vec::with_capacity(input.len());
+    let bytes = input.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                let h = hex_val(bytes[i + 1])?;
+                let l = hex_val(bytes[i + 2])?;
+                out.push((h << 4) | l);
+                i += 3;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    let decoded = String::from_utf8(out).ok()?;
+    Some(PathBuf::from(decoded))
+}
+
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(10 + b - b'a'),
+        b'A'..=b'F' => Some(10 + b - b'A'),
+        _ => None,
+    }
+}
+
+fn clipboard_entry_from_image_path(path: &Path) -> Option<ClipboardEntry> {
+    let ext = path.extension()?.to_string_lossy().to_ascii_lowercase();
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        _ => return None,
+    };
+
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES {
+        return None;
+    }
+
+    let mut hasher = DefaultHasher::new();
+    mime.hash(&mut hasher);
+    bytes.hash(&mut hasher);
+    let hash = hasher.finish();
+    let thumbnail_png = make_thumbnail_png(mime, &bytes);
+
+    Some(ClipboardEntry::Image {
+        mime: mime.to_string(),
+        bytes,
+        hash,
+        thumbnail_png,
+    })
+}
+
 fn make_thumbnail_png(mime: &str, bytes: &[u8]) -> Option<Vec<u8>> {
     let format = match mime {
         "image/png" => image::ImageFormat::Png,
@@ -232,8 +334,7 @@ pub fn write_clipboard_image(mime: &str, bytes: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
-
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
     fn image_entry(
         mime: &str,
         bytes: Vec<u8>,
@@ -280,6 +381,39 @@ mod tests {
         assert_eq!(a, b);
         assert_ne!(a, c);
         assert_ne!(a, d);
+    }
+
+    #[test]
+    fn parses_first_local_file_uri() {
+        let list = "# comment\n\nfile:///tmp/hello%20world.png\nfile:///tmp/second.jpg\n";
+        let parsed =
+            parse_first_local_path_from_uri_list(list).expect("first path should parse");
+        assert_eq!(parsed, PathBuf::from("/tmp/hello world.png"));
+    }
+
+    #[test]
+    fn creates_image_entry_from_local_file_path() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time should be after unix epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("clippy-land-test-{unique}.png"));
+
+        let img = image::RgbaImage::from_pixel(2, 2, image::Rgba([0, 255, 0, 255]));
+        image::DynamicImage::ImageRgba8(img)
+            .save_with_format(&path, image::ImageFormat::Png)
+            .expect("test image should save");
+
+        let entry = clipboard_entry_from_image_path(&path).expect("image entry should be created");
+        match entry {
+            ClipboardEntry::Image { mime, bytes, .. } => {
+                assert_eq!(mime, "image/png");
+                assert!(!bytes.is_empty());
+            }
+            ClipboardEntry::Text(_) => panic!("expected image"),
+        }
+
+        let _ = std::fs::remove_file(path);
     }
 
     fn wayland_tests_enabled() -> bool {

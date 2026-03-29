@@ -2,9 +2,9 @@ use super::model::HistoryItem;
 use super::{AppModel, Message};
 use crate::services::clipboard;
 use cosmic::iced::Subscription;
+use cosmic::iced::futures::channel::mpsc;
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
 use cosmic::prelude::*;
-use cosmic::iced::futures::channel::mpsc;
 use futures_util::SinkExt;
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -12,10 +12,10 @@ use std::time::Duration;
 const MAX_HISTORY: usize = 30;
 const MAX_PINNED: usize = 5;
 
-pub fn subscription(_app: &AppModel) -> Subscription<Message> {
+pub fn subscription(app: &AppModel) -> Subscription<Message> {
     struct ClipboardSubscription;
 
-    Subscription::batch(vec![Subscription::run_with(
+    let mut subs: Vec<Subscription<Message>> = vec![Subscription::run_with(
         std::any::TypeId::of::<ClipboardSubscription>(),
         |_| {
             cosmic::iced::stream::channel(1, move |mut channel: mpsc::Sender<Message>| async move {
@@ -46,7 +46,60 @@ pub fn subscription(_app: &AppModel) -> Subscription<Message> {
                 }
             })
         },
-    )])
+    )];
+
+    // When the popup is open, subscribe to keyboard events for navigation.
+    if app.popup.is_some() {
+        use cosmic::iced::{Event, event};
+        use cosmic::iced_core::keyboard;
+        use cosmic::iced_core::keyboard::key::Named as NamedKey;
+        use cosmic::iced_futures::event::listen_raw;
+
+        let key_sub = listen_raw(move |event, status, _| {
+            if event::Status::Ignored != status {
+                return None;
+            }
+
+            match event {
+                Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(named),
+                    ..
+                }) => match named {
+                    NamedKey::ArrowUp => return Some(Message::MoveSelectionUp),
+                    NamedKey::ArrowDown => return Some(Message::MoveSelectionDown),
+                    NamedKey::ArrowLeft => return Some(Message::MoveFocusLeft),
+                    NamedKey::ArrowRight => return Some(Message::MoveFocusRight),
+                    NamedKey::Enter => return Some(Message::ActivateSelection),
+                    _ => (),
+                },
+                Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Character(c),
+                    physical_key,
+                    ..
+                }) => {
+                    // Normalize character to latin if possible using physical key
+                    let key_obj = keyboard::Key::Character(c.clone());
+                    if let Some(ch) = key_obj.to_latin(physical_key) {
+                        match ch {
+                            'j' | 'J' => return Some(Message::MoveSelectionDown),
+                            'k' | 'K' => return Some(Message::MoveSelectionUp),
+                            'h' | 'H' => return Some(Message::MoveFocusLeft),
+                            'l' | 'L' => return Some(Message::MoveFocusRight),
+                            '\n' | '\r' => return Some(Message::ActivateSelection),
+                            _ => (),
+                        }
+                    }
+                }
+                _ => (),
+            }
+
+            None
+        });
+
+        subs.push(key_sub);
+    }
+
+    Subscription::batch(subs)
 }
 
 fn pinned_count(history: &VecDeque<HistoryItem>) -> usize {
@@ -123,11 +176,7 @@ pub fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Action<Messa
                     }
                 }
             }
-            if let Some(p) = app.popup.take() {
-                app.hovered_index = None;
-                app.at_scroll_bottom = false;
-                return destroy_popup(p);
-            }
+            // Keep popup open after mouse selection so users can perform further actions.
         }
         Message::RemoveHistory(index) => {
             let _ = app.history.remove(index);
@@ -136,7 +185,131 @@ pub fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Action<Messa
             app.history.clear();
         }
         Message::HoverEntry(opt) => {
-            app.hovered_index = opt;
+            if let Some((idx, part)) = opt {
+                app.hovered_index = Some(idx);
+                app.hovered_focus = Some((idx, part));
+            } else {
+                app.hovered_index = None;
+                app.hovered_focus = None;
+            }
+        }
+        Message::MoveSelectionUp => {
+            if app.history.is_empty() {
+                return Task::none();
+            }
+            let len = app.history.len();
+            let new_idx = match app.hovered_index {
+                Some(idx) => {
+                    if idx == 0 {
+                        len - 1
+                    } else {
+                        idx - 1
+                    }
+                }
+                None => len - 1,
+            };
+            app.hovered_index = Some(new_idx);
+            // reset sub-focus to the main entry when moving selection
+            app.keyboard_focus = Some((new_idx, crate::app::model::FocusPart::Entry));
+            app.at_scroll_bottom = false;
+        }
+        Message::MoveSelectionDown => {
+            if app.history.is_empty() {
+                return Task::none();
+            }
+            let len = app.history.len();
+            let new_idx = match app.hovered_index {
+                Some(idx) => (idx + 1) % len,
+                None => 0,
+            };
+            app.hovered_index = Some(new_idx);
+            app.keyboard_focus = Some((new_idx, crate::app::model::FocusPart::Entry));
+            app.at_scroll_bottom = false;
+        }
+
+        Message::MoveFocusLeft => {
+            if let Some((idx, part)) = app.keyboard_focus {
+                if Some(idx) != app.hovered_index {
+                    // move focus to hovered_index if different
+                    if let Some(h) = app.hovered_index {
+                        app.keyboard_focus = Some((h, crate::app::model::FocusPart::Entry));
+                    }
+                } else {
+                    let new_part = match part {
+                        crate::app::model::FocusPart::Entry => crate::app::model::FocusPart::Remove,
+                        crate::app::model::FocusPart::Pin => crate::app::model::FocusPart::Entry,
+                        crate::app::model::FocusPart::Remove => crate::app::model::FocusPart::Pin,
+                    };
+                    app.keyboard_focus = Some((idx, new_part));
+                }
+            } else if let Some(h) = app.hovered_index {
+                app.keyboard_focus = Some((h, crate::app::model::FocusPart::Entry));
+            }
+        }
+
+        Message::MoveFocusRight => {
+            if let Some((idx, part)) = app.keyboard_focus {
+                if Some(idx) != app.hovered_index {
+                    if let Some(h) = app.hovered_index {
+                        app.keyboard_focus = Some((h, crate::app::model::FocusPart::Entry));
+                    }
+                } else {
+                    let new_part = match part {
+                        crate::app::model::FocusPart::Entry => crate::app::model::FocusPart::Pin,
+                        crate::app::model::FocusPart::Pin => crate::app::model::FocusPart::Remove,
+                        crate::app::model::FocusPart::Remove => crate::app::model::FocusPart::Entry,
+                    };
+                    app.keyboard_focus = Some((idx, new_part));
+                }
+            } else if let Some(h) = app.hovered_index {
+                app.keyboard_focus = Some((h, crate::app::model::FocusPart::Entry));
+            }
+        }
+        Message::ActivateSelection => {
+            if let Some((idx, part)) = app.keyboard_focus {
+                if let Some(item) = app.history.get(idx) {
+                    match part {
+                        crate::app::model::FocusPart::Entry => {
+                            if let clipboard::ClipboardEntry::Text(text) = &item.entry {
+                                let _ = clipboard::write_clipboard_text(text);
+                            }
+                        }
+                        crate::app::model::FocusPart::Pin => {
+                            // Toggle pin for the focused index
+                            // reuse existing logic
+                            let Some(mut item) = app.history.remove(idx) else {
+                                return Task::none();
+                            };
+                            if item.pinned {
+                                item.pinned = false;
+                                insert_after_pins(&mut app.history, item);
+                            } else if pinned_count(&app.history) >= MAX_PINNED {
+                                // Pin limit reached; put it back
+                                app.history.insert(idx, item);
+                            } else {
+                                item.pinned = true;
+                                insert_after_pins(&mut app.history, item);
+                            }
+                        }
+                        crate::app::model::FocusPart::Remove => {
+                            let _ = app.history.remove(idx);
+                        }
+                    }
+                }
+                // Keep popup open; keyboard activation shouldn't close it.
+            } else if let Some(idx) = app.hovered_index {
+                // fallback: behave like previous ActivateSelection (copy)
+                if let Some(item) = app.history.get(idx) {
+                    match &item.entry {
+                        clipboard::ClipboardEntry::Text(text) => {
+                            let _ = clipboard::write_clipboard_text(text);
+                        }
+                        clipboard::ClipboardEntry::Image { mime, bytes, .. } => {
+                            let _ = clipboard::write_clipboard_image(mime, bytes);
+                        }
+                    }
+                }
+            }
         }
         Message::TogglePopup => {
             return if let Some(p) = app.popup.take() {

@@ -11,5 +11,15 @@ pub enum Message {
     RemoveHistory(usize),
     ClearHistory,
     CopyFromHistory(usize),
-    HoverEntry(Option<usize>),
+    HoverEntry(Option<(usize, crate::app::model::FocusPart)>),
+    /// Move the selection up (keyboard)
+    MoveSelectionUp,
+    /// Move the selection down (keyboard)
+    MoveSelectionDown,
+    /// Move sub-focus left (e.g., to actions)
+    MoveFocusLeft,
+    /// Move sub-focus right (e.g., to actions)
+    MoveFocusRight,
+    /// Activate the currently selected entry or focused control (Enter)
+    ActivateSelection,
 }

@@ -1,3 +1,10 @@
 /target
+/vendor/
+build-dir/
+.flatpak-builder/
 deb_build/
 *.deb
+repo/
+.cargo/
+*.log
+*.flatpak

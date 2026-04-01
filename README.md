@@ -58,6 +58,15 @@ just install
 just uninstall
 ```
 
+## Install with flatpak
+
+Download the latest .flatpak from the [releases page](https://github.com/k33wee/clippy-land/releases/):
+In a terminal, navigate to the directory where you downloaded the .flatpak file and run:
+
+```bash
+flatpak install clippy-land.flatpak
+```
+
 ## Install for Debian/Ubuntu
 
 Download the latest .deb from the [releases page](https://github.com/k33wee/clippy-land/releases/):
@@ -94,7 +103,7 @@ You might need to log out and back in to see the applet in the list of available
 
 ## Notes
 
-- App ID is currently `com.keewee.CosmicAppletClippyLand`
+- App ID is currently `io.github.k33wee.clippy-land`.
 
 ## Translations
 

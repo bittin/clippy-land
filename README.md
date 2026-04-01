@@ -58,14 +58,23 @@ just install
 just uninstall
 ```
 
-## Install with flatpak
+## Install with Flatpak
 
-Download the latest .flatpak from the [releases page](https://github.com/k33wee/clippy-land/releases/):
-In a terminal, navigate to the directory where you downloaded the .flatpak file and run:
+1. Make sure you have Flatpak installed. See https://flatpak.org/setup/ if needed.
+2. Add the required remotes (if not already added):
 
 ```bash
-flatpak install clippy-land.flatpak
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 ```
+
+3. Download the latest `.flatpak` from the [releases page](https://github.com/k33wee/clippy-land/releases/).
+4. In a terminal, navigate to the directory where you downloaded the `.flatpak` file and run:
+
+```bash
+flatpak install --user ./clippy-land_<version>.flatpak
+```
+
+This will install the applet for your user. If you encounter missing runtime errors, ensure the remotes above are added and try again.
 
 ## Install for Debian/Ubuntu
 

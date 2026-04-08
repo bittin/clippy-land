@@ -1,4 +1,7 @@
-use super::style::{highlight_history_target, transparent_entry_button_style};
+use super::style::{
+    highlight_history_target, pressed_entry_button_style, transparent_entry_button_style,
+    transparent_icon_button_style,
+};
 use super::summary::summarize_one_line;
 use crate::app::model::{FocusPart, HistoryItem};
 use crate::app::{AppModel, Message, icons};
@@ -13,7 +16,6 @@ pub(super) fn history_row<'a>(
     app: &'a AppModel,
     idx: usize,
     item: &'a HistoryItem,
-    icon_color: &'a str,
 ) -> Element<'a, Message> {
     let label: Element<'_, Message> = match &item.entry {
         clipboard::ClipboardEntry::Text(text) => {
@@ -57,7 +59,7 @@ pub(super) fn history_row<'a>(
             active: Box::new(|_, theme| transparent_entry_button_style(theme)),
             disabled: Box::new(transparent_entry_button_style),
             hovered: Box::new(|_, theme| transparent_entry_button_style(theme)),
-            pressed: Box::new(|_, theme| transparent_entry_button_style(theme)),
+            pressed: Box::new(|_, theme| pressed_entry_button_style(theme)),
         })
         .on_press(Message::CopyFromHistory(idx))
         .width(Length::Fill)
@@ -76,7 +78,13 @@ pub(super) fn history_row<'a>(
     let pin_button = widget::button::icon(if item.pinned {
         icons::pin_icon_pinned()
     } else {
-        icons::pin_icon(icon_color)
+        icons::pin_icon()
+    })
+    .class(cosmic::theme::Button::Custom {
+        active: Box::new(|_, theme| transparent_icon_button_style(theme)),
+        disabled: Box::new(transparent_icon_button_style),
+        hovered: Box::new(|_, theme| transparent_icon_button_style(theme)),
+        pressed: Box::new(|_, theme| transparent_icon_button_style(theme)),
     })
     .tooltip(if item.pinned {
         fl!("unpin")
@@ -87,7 +95,13 @@ pub(super) fn history_row<'a>(
     .extra_small()
     .width(Length::Shrink);
 
-    let remove_button = widget::button::icon(icons::remove_icon(icon_color))
+    let remove_button = widget::button::icon(icons::remove_icon())
+        .class(cosmic::theme::Button::Custom {
+            active: Box::new(|_, theme| transparent_icon_button_style(theme)),
+            disabled: Box::new(transparent_icon_button_style),
+            hovered: Box::new(|_, theme| transparent_icon_button_style(theme)),
+            pressed: Box::new(|_, theme| transparent_icon_button_style(theme)),
+        })
         .tooltip(fl!("remove"))
         .on_press(Message::RemoveHistory(idx))
         .extra_small()

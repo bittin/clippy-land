@@ -50,6 +50,7 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
             if let Some((idx, part)) = opt {
                 app.hovered_index = Some(idx);
                 app.hovered_focus = Some((idx, part));
+                app.keyboard_focus = None;
             } else {
                 app.hovered_index = None;
                 app.hovered_focus = None;
@@ -75,6 +76,7 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
                 None => len - 1,
             };
             app.hovered_index = Some(new_idx);
+            app.hovered_focus = None;
             app.keyboard_focus = Some((new_idx, FocusPart::Entry));
             app.at_scroll_bottom = false;
             return scroll::scroll_selection_into_view(app, new_idx);
@@ -89,6 +91,7 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
                 None => 0,
             };
             app.hovered_index = Some(new_idx);
+            app.hovered_focus = None;
             app.keyboard_focus = Some((new_idx, FocusPart::Entry));
             app.at_scroll_bottom = false;
             return scroll::scroll_selection_into_view(app, new_idx);

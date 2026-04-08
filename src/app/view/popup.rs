@@ -14,10 +14,6 @@ pub(super) fn view(app: &AppModel) -> Element<'_, Message> {
 }
 
 pub(super) fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
-    let theme = cosmic::theme::active();
-    let is_dark = theme.theme_type.is_dark();
-    let icon_color = if is_dark { "#dcdcdc" } else { "#2e3436" };
-
     let mut history_column = widget::column::Column::new().spacing(4);
 
     if app.history.is_empty() {
@@ -34,7 +30,7 @@ pub(super) fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
                 history_column = history_column.push(widget::divider::horizontal::default());
             }
 
-            history_column = history_column.push(history_row(app, idx, item, icon_color));
+            history_column = history_column.push(history_row(app, idx, item));
         }
     }
 
@@ -51,8 +47,6 @@ pub(super) fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
     .max_height(400.0)
     .width(Length::Fill);
 
-    let destructive_icon_color = if is_dark { "#2e3436" } else { "#dcdcdc" };
-
     let mut content = widget::column::Column::new()
         .spacing(8)
         .padding([8, 8])
@@ -60,7 +54,7 @@ pub(super) fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
 
     if !app.history.is_empty() {
         let delete_all_button = widget::button::destructive(fl!("delete-all"))
-            .leading_icon(icons::remove_icon(destructive_icon_color))
+            .leading_icon(icons::remove_icon())
             .on_press(Message::ClearHistory);
 
         let controls_sheet = widget::container(delete_all_button)

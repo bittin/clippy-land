@@ -9,8 +9,10 @@ on:
 jobs:
   build-deb:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -23,7 +25,7 @@ jobs:
             libxkbcommon-dev pkgconf
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -35,15 +37,17 @@ jobs:
       - name: Build .deb
         run: bash build-deb.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: deb
-          path: "*.deb"
+          path: "release/*.deb"
 
   build-flatpak:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -57,7 +61,7 @@ jobs:
           fi
 
       - name: Cache vendor directory
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: vendor
           key: vendor-${{ hashFiles('**/Cargo.lock') }}
@@ -97,7 +101,7 @@ jobs:
             io.github.k33wee.clippy-land \
             testing
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: flatpak
           path: clippy-land_${{ steps.version.outputs.value }}.flatpak

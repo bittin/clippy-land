@@ -7,7 +7,7 @@ the contents change.
 
 ![applet example](./resources/example.png)
 
-Main features:
+## Main features
 
 - Keep a history of the latest **30** clipboard entries (text + images)
 - Re-copy an entry with a single click
@@ -15,6 +15,19 @@ Main features:
 - Clear all entries from history with one click
 - Pin important entries to the top of the history (5 pinned entries max)
 - Move between entries with arrow keys (up/down or k/j to navigate between entries, left/right or h/l to move to pin or delete buttons. You need to interact with the applet at least once to enable keyboard navigation)
+
+## Table of Contents
+
+> - [Dependencies](#dependencies)
+> - [Build](#build)
+> - [Build/Install with just](#buildinstall-with-just)
+> - [Install with custom paths](#install-with-custom-paths)
+> - [Install with Flatpak](#install-with-flatpak)
+> - [Install for Debian/Ubuntu](#install-for-debianubuntu)
+> - [Install for Fedora](#install-for-fedora)
+> - [Usage](#usage)
+> - [Notes](#notes)
+> - [Translations](#translations)
 
 ## Dependencies
 

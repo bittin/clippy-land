@@ -23,6 +23,7 @@ build-dir/
 .flatpak-builder/
 repo/
 *.flatpak
+release/
 
 # Debian package build artifacts
 deb_build/

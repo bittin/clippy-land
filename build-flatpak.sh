@@ -16,7 +16,7 @@ cargo vendor > .cargo/config.toml
 cargo metadata --offline --format-version 1 >/dev/null
 
 # Uninstall old version
-flatpak uninstall $APPID -y || true
+flatpak --user uninstall $APPID -y || true
 
 # Build and install the new version
 flatpak-builder --force-clean --repo=repo build-dir $APPID.json

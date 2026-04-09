@@ -39,5 +39,8 @@ EOL
 
 # Build the .deb
 DEB_NAME="${NAME}_${VERSION}_${ARCH}.deb"
-dpkg-deb --build deb_build "$DEB_NAME"
+
+# Export to release directory
+mkdir -p release
+dpkg-deb --build deb_build "release/$DEB_NAME"
 echo "Created $DEB_NAME"

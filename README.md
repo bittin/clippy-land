@@ -136,7 +136,7 @@ You can open the clipboard history with a keyboard shortcut via the `--toggle` f
 
 Go to **COSMIC Settings → Keyboard → Custom Shortcuts**, add a new shortcut with:
 
-- **Name:** Clipboard History
+- **Name:** Toggle ClippyLand
 - **Command:** `cosmic-applet-clippy-land --toggle` (or `flatpak run io.github.k33wee.clippy-land --toggle` if installed via Flatpak)
 - **Shortcut:** your preferred key combo (e.g. `Super+V`)
 

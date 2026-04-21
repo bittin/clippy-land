@@ -5,26 +5,40 @@
   <project_license>GPL-3.0-or-later</project_license>
   <name>Clippy Land</name>
   <summary>Clipboard history for COSMIC panel</summary>
-  <summary xml:lang="cs">Applet historie schránky pro COSMIC</summary>
+  <summary xml:lang="cs">Historie schránky pro panel COSMIC</summary>
   <developer id="io.github.k33wee">
     <name>k33wee</name>
   </developer>
   <description>
-    <p>Clippy Land is a COSMIC panel applet that keeps a history of recently copied text and images.
-    Click the panel icon to browse, re-copy, pin, or delete clipboard entries without leaving your workflow.
-    Note: this applet only works on the COSMIC™ desktop environment.</p>
+    <p>
+      Clippy Land is a COSMIC panel applet that keeps a history of recently copied text and images.
+      Click the panel icon to browse, re-copy, pin, or delete clipboard entries without leaving your workflow.
+      Note: this applet only works on the COSMIC™ desktop environment.
+    </p>
+    <p xml:lang="cs">
+      Clippy Land je applet pro panel COSMIC, který uchovává historii nedávno zkopírovaného textu a obrázků.
+      Kliknutím na ikonu v panelu můžete procházet, znovu kopírovat, připínat nebo mazat položky schránky, aniž byste museli přerušit svou práci.
+      Poznámka: Tento applet funguje pouze v prostředí COSMIC™.
+    </p>
+    <p xml:lang="it">COSMIC panel applet che mantiene la cronologia del testo e delle immagini copiati.</p>
+    <p xml:lang="pt">Um applet para o painel COSMIC que mantém histórico de cópias recentes de texto e imagens.</p>
+
     <p>Features:</p>
+    <p xml:lang="cs">Funkce:</p>
+
     <ul>
       <li>Stores up to 30 clipboard entries (text and images)</li>
       <li>Re-copy any entry with a single click</li>
       <li>Pin up to 5 important entries so they stay at the top</li>
       <li>Remove individual entries or clear the entire history at once</li>
       <li>Keyboard navigation with arrow keys (or Vim-style h/j/k/l)</li>
+
+      <li xml:lang="cs">Uložení až 30 položek schránky (text a obrázky)</li>
+      <li xml:lang="cs">Znovu zkopírování libovolné položky jediným kliknutím</li>
+      <li xml:lang="cs">Připnutí až 5 důležitých položek tak, aby zůstaly nahoře</li>
+      <li xml:lang="cs">Odstranění jednotlivých položek nebo vymazání celé historie najednou</li>
+      <li xml:lang="cs">Ovládání pomocí klávesnice šipkami (nebo styl Vim: h/j/k/l)</li>
     </ul>
-    <!-- Translations below -->
-    <p xml:lang="cs">Applet pro panel COSMIC, který uchovává historii nedávno zkopírovaného textu a obrázků.</p>
-    <p xml:lang="it">COSMIC panel applet che mantiene la cronologia del testo e delle immagini copiati.</p>
-    <p xml:lang="pt">Um applet para o painel COSMIC que mantém histórico de cópias recentes de texto e imagens.</p>
   </description>
   <icon type="stock">io.github.k33wee.clippy-land</icon>
   <launchable type="desktop-id">io.github.k33wee.clippy-land.desktop</launchable>
@@ -53,6 +67,15 @@
     <keyword>Wayland</keyword>
     <keyword>copy</keyword>
     <keyword>paste</keyword>
+    
+    <keyword xml:lang="cs">schránka</keyword>
+    <keyword xml:lang="cs">historie</keyword>
+    <keyword xml:lang="cs">panel</keyword>
+    <keyword xml:lang="cs">applet</keyword>
+    <keyword xml:lang="cs">COSMIC</keyword>
+    <keyword xml:lang="cs">Wayland</keyword>
+    <keyword xml:lang="cs">kopírovat</keyword>
+    <keyword xml:lang="cs">vložit</keyword>
   </keywords>
   <screenshots>
     <screenshot type="default">

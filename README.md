@@ -1,5 +1,8 @@
 # clippy-land
 
+![GitHub License](https://img.shields.io/github/license/k33wee/clippy-land)
+![GitHub Repo stars](https://img.shields.io/github/stars/k33wee/clippy-land)
+
 COSMIC panel applet for keeping a history of recently copied text and images.
 
 This applet polls the Wayland clipboard and updates the history when
@@ -19,63 +22,27 @@ the contents change.
 
 ## Table of Contents
 
-- [Dependencies](#dependencies)
-- [Build](#build)
-- [Build/Install with just](#buildinstall-with-just)
-- [Install with custom paths](#install-with-custom-paths)
+- [Install from cosmic store](#cosmic-store)
 - [Install with Flatpak](#install-with-flatpak)
 - [Install for Debian/Ubuntu](#install-for-debianubuntu)
 - [Install for Fedora](#install-for-fedora)
+- [Dependencies](#dependencies)
+- [Build/Install with just](#buildinstall-with-just)
+- [Install with custom paths](#install-with-custom-paths)
 - [Usage](#usage)
 - [Notes](#notes)
 - [Translations](#translations)
 
-## Dependencies
 
-- Wayland clipboard support (via `wl-clipboard-rs`)
-- Build dependencies for libcosmic:
+## Cosmic Store
 
-```bash
-sudo apt install cargo cmake just libexpat1-dev libfontconfig-dev libfreetype-dev libxkbcommon-dev pkgconf
+The applet is officially pubished on [Cosmic Store](https://github.com/pop-os/cosmic-store). In COSMIC Store it should be under the "COSMIC Applets" category.
+
+If it does not show up in your app store, you'll need to add `cosmic-flatpak` as a source:
+```sh
+flatpak remote-add --if-not-exists --user cosmic https://apt.pop-os.org/cosmic/cosmic.flatpakrepo
 ```
-
-## Build
-
-```bash
-cargo build --release
-```
-
-## Build/Install with just
-
-```bash
-# build
-sudo just build
-
-# install for current user
-sudo just install
-```
-
-## Install with custom paths
-
-Pass a `prefix` variable to install everything under a custom root:
-
-```bash
-# install under ~/.local  (default is /usr)
-sudo just prefix=~/.local install
-
-# uninstall
-sudo just prefix=~/.local uninstall
-```
-
-All paths are derived from `prefix`:
-
-| Path                                         | Default                  |
-| -------------------------------------------- | ------------------------ |
-| `<prefix>/bin`                               | binary + launcher script |
-| `<prefix>/share/applications`                | `.desktop` file          |
-| `<prefix>/share/icons/hicolor/scalable/apps` | app icon                 |
-| `<prefix>/share/metainfo`                    | MetaInfo file            |
-| `<prefix>/share/licenses/<appid>`            | license                  |
+Just install it from the store and you'll have the flatpak sandbox installed!
 
 ## Install with Flatpak
 
@@ -124,6 +91,51 @@ sudo wget \
     -O /etc/yum.repos.d/_copr:copr.fedorainfracloud.org:kordus:cosmic-applets.repo
 rpm-ostree install cosmic-applet-clippy-land
 ```
+
+## Dependencies
+
+- Wayland clipboard support (via `wl-clipboard-rs`)
+- Build dependencies for libcosmic:
+
+```bash
+sudo apt install cargo cmake just libexpat1-dev libfontconfig-dev libfreetype-dev libxkbcommon-dev pkgconf
+```
+
+## Build/Install with just
+
+```bash
+cargo build --release
+```
+
+```bash
+# build
+sudo just build
+
+# install for current user
+sudo just install
+```
+
+## Install with custom paths
+
+Pass a `prefix` variable to install everything under a custom root:
+
+```bash
+# install under ~/.local  (default is /usr)
+sudo just prefix=~/.local install
+
+# uninstall
+sudo just prefix=~/.local uninstall
+```
+
+All paths are derived from `prefix`:
+
+| Path                                         | Default                  |
+| -------------------------------------------- | ------------------------ |
+| `<prefix>/bin`                               | binary + launcher script |
+| `<prefix>/share/applications`                | `.desktop` file          |
+| `<prefix>/share/icons/hicolor/scalable/apps` | app icon                 |
+| `<prefix>/share/metainfo`                    | MetaInfo file            |
+| `<prefix>/share/licenses/<appid>`            | license                  |
 
 ## Usage
 

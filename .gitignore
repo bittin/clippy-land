@@ -22,6 +22,7 @@ target/
 build-dir/
 .flatpak-builder/
 repo/
+flathub.md
 *.flatpak
 release/
 

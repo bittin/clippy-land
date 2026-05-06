@@ -23,26 +23,43 @@ the contents change.
 ## Table of Contents
 
 - [Install from cosmic store](#cosmic-store)
+- [Usage](#usage)
 - [Install with Flatpak](#install-with-flatpak)
 - [Install for Debian/Ubuntu](#install-for-debianubuntu)
 - [Install for Fedora](#install-for-fedora)
-- [Dependencies](#dependencies)
 - [Build/Install with just](#buildinstall-with-just)
 - [Install with custom paths](#install-with-custom-paths)
-- [Usage](#usage)
 - [Notes](#notes)
 - [Translations](#translations)
-
 
 ## Cosmic Store
 
 The applet is officially pubished on [Cosmic Store](https://github.com/pop-os/cosmic-store). In COSMIC Store it should be under the "COSMIC Applets" category.
 
 If it does not show up in your app store, you'll need to add `cosmic-flatpak` as a source:
+
 ```sh
 flatpak remote-add --if-not-exists --user cosmic https://apt.pop-os.org/cosmic/cosmic.flatpakrepo
 ```
+
 Just install it from the store and you'll have the flatpak sandbox installed!
+
+## Usage
+
+Open **COSMIC Settings → Desktop → Panel → Applets** and add "Clippy Land" to your panel.
+You might need to log out and back in to see the applet in the list of available applets.
+
+## Keyboard Shortcut
+
+You can open the clipboard history with a keyboard shortcut via the `--toggle` flag.
+
+Go to **COSMIC Settings → Keyboard → Custom Shortcuts**, add a new shortcut with:
+
+- **Name:** Toggle ClippyLand
+- **Command:** `cosmic-applet-clippy-land --toggle` (or `flatpak run io.github.k33wee.clippy-land --toggle` if installed via Flatpak)
+- **Shortcut:** your preferred key combo (e.g. `Super+V`)
+
+> **Note:** Due to a current limitation in the COSMIC panel, opening a popup without a pointer event (i.e. without actually clicking the applet icon) is not natively supported. As a workaround, `--toggle` opens the history as a full-width layer surface anchored to the top of the screen rather than as the usual dropdown under the icon. This is a known limitation and may be improved in the future once COSMIC panel exposes a proper API for this.
 
 ## Install with Flatpak
 
@@ -92,19 +109,15 @@ sudo wget \
 rpm-ostree install cosmic-applet-clippy-land
 ```
 
-## Dependencies
+## Build/Install with just
+
+### Dependencies
 
 - Wayland clipboard support (via `wl-clipboard-rs`)
 - Build dependencies for libcosmic:
 
 ```bash
 sudo apt install cargo cmake just libexpat1-dev libfontconfig-dev libfreetype-dev libxkbcommon-dev pkgconf
-```
-
-## Build/Install with just
-
-```bash
-cargo build --release
 ```
 
 ```bash
@@ -137,33 +150,17 @@ All paths are derived from `prefix`:
 | `<prefix>/share/metainfo`                    | MetaInfo file            |
 | `<prefix>/share/licenses/<appid>`            | license                  |
 
-## Usage
-
-Open **COSMIC Settings → Desktop → Panel → Applets** and add "Clippy Land" to your panel.
-You might need to log out and back in to see the applet in the list of available applets.
-
-## Keyboard Shortcut
-
-You can open the clipboard history with a keyboard shortcut via the `--toggle` flag.
-
-Go to **COSMIC Settings → Keyboard → Custom Shortcuts**, add a new shortcut with:
-
-- **Name:** Toggle ClippyLand
-- **Command:** `cosmic-applet-clippy-land --toggle` (or `flatpak run io.github.k33wee.clippy-land --toggle` if installed via Flatpak)
-- **Shortcut:** your preferred key combo (e.g. `Super+V`)
-
-> **Note:** Due to a current limitation in the COSMIC panel, opening a popup without a pointer event (i.e. without actually clicking the applet icon) is not natively supported. As a workaround, `--toggle` opens the history as a full-width layer surface anchored to the top of the screen rather than as the usual dropdown under the icon. This is a known limitation and may be improved in the future once COSMIC panel exposes a proper API for this.
-
 ## Notes
 
 - App ID is currently `io.github.k33wee.clippy-land`.
 
 ## Translations
 
-Thanks to our community contributors, Clippy Land is available in the following languages:
+Clippy Land is available in the following languages, thanks to:
 
 - **Italian** ([k33wee](https://github.com/k33wee))
 - **English** ([k33wee](https://github.com/k33wee))
 - **Portuguese** ([GuilhermeTerriaga](https://github.com/GuilhermeTerriaga))
 - **Czech** ([lorduskordus](https://github.com/lorduskordus))
 - **Ukrainian** ([Dymkom](https://github.com/Dymkom))
+- **Swedish** ([bittin](https://github.com/bittin))

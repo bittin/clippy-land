@@ -86,6 +86,47 @@ fn creates_image_entry_from_local_file_path() {
     let _ = std::fs::remove_file(path);
 }
 
+#[test]
+fn rejects_image_with_oversized_dimensions() {
+    let huge = RgbaImage::from_pixel(9000, 1, Rgba([255, 0, 0, 255]));
+    let mut png = Vec::new();
+    DynamicImage::ImageRgba8(huge)
+        .write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
+        .expect("huge test image encoding should work");
+
+    let entry = super::image::clipboard_entry_from_image_bytes("image/png".to_string(), png)
+        .expect("image entry should still be created");
+
+    match entry {
+        ClipboardEntry::Image { thumbnail_png, .. } => {
+            assert!(
+                thumbnail_png.is_none(),
+                "oversized-dimension image should not generate thumbnail"
+            );
+        }
+        ClipboardEntry::Text(_) => panic!("expected image entry"),
+    }
+}
+
+#[test]
+fn rejects_malformed_image_bytes_for_thumbnail() {
+    let entry = super::image::clipboard_entry_from_image_bytes(
+        "image/png".to_string(),
+        vec![1, 2, 3, 4, 5, 6, 7],
+    )
+    .expect("entry should still be created with raw bytes");
+
+    match entry {
+        ClipboardEntry::Image { thumbnail_png, .. } => {
+            assert!(
+                thumbnail_png.is_none(),
+                "malformed image should not generate thumbnail"
+            );
+        }
+        ClipboardEntry::Text(_) => panic!("expected image entry"),
+    }
+}
+
 fn wayland_tests_enabled() -> bool {
     std::env::var("CLIPPY_LAND_RUN_WAYLAND_TESTS")
         .map(|v| v == "1")

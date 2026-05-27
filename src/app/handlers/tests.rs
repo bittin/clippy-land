@@ -2,6 +2,7 @@ use super::{history, scroll, update};
 use crate::app::model::{FocusPart, HistoryItem};
 use crate::app::{AppModel, Message};
 use crate::services::clipboard;
+use crate::settings::AppSettings;
 
 fn text_entry(text: &str) -> clipboard::ClipboardEntry {
     clipboard::ClipboardEntry::Text(text.to_string())
@@ -14,6 +15,15 @@ fn text_item(text: &str, pinned: bool) -> HistoryItem {
     }
 }
 
+fn image_entry(hash: u64) -> clipboard::ClipboardEntry {
+    clipboard::ClipboardEntry::Image {
+        mime: "image/png".to_string(),
+        bytes: vec![1, 2, 3, 4],
+        hash,
+        thumbnail_png: Some(vec![137, 80, 78, 71]),
+    }
+}
+
 fn item_text(item: &HistoryItem) -> &str {
     match &item.entry {
         clipboard::ClipboardEntry::Text(text) => text,
@@ -21,6 +31,15 @@ fn item_text(item: &HistoryItem) -> &str {
             panic!("expected text entry in handler tests")
         }
     }
+}
+
+fn test_settings(max_history: usize, max_pinned: usize) -> AppSettings {
+    AppSettings {
+        max_history,
+        max_pinned,
+        ..AppSettings::default()
+    }
+    .normalized()
 }
 
 #[test]
@@ -63,6 +82,45 @@ fn clipboard_changed_dedupes_and_preserves_pin_state() {
 }
 
 #[test]
+fn clipboard_changed_caches_and_prunes_thumbnail_handles() {
+    let mut app = AppModel::default();
+
+    let _ = update(&mut app, Message::ClipboardChanged(image_entry(42)));
+    assert_eq!(app.thumbnail_handles.len(), 1);
+
+    let _ = update(&mut app, Message::RemoveHistory(0));
+    assert!(app.history.is_empty());
+    assert!(app.thumbnail_handles.is_empty());
+}
+
+#[test]
+fn clipboard_changed_recomputes_filtered_indices_cache() {
+    let mut app = AppModel::default();
+    app.search_query = "ap".into();
+    app.recompute_filtered_indices();
+    assert!(app.filtered_indices.is_empty());
+
+    let _ = update(
+        &mut app,
+        Message::ClipboardChanged(clipboard::ClipboardEntry::Text("apple".into())),
+    );
+
+    assert_eq!(app.filtered_indices, vec![0]);
+}
+
+#[test]
+fn clear_history_clears_thumbnail_handles() {
+    let mut app = AppModel::default();
+
+    let _ = update(&mut app, Message::ClipboardChanged(image_entry(7)));
+    assert_eq!(app.thumbnail_handles.len(), 1);
+
+    let _ = update(&mut app, Message::ClearHistory);
+    assert!(app.history.is_empty());
+    assert!(app.thumbnail_handles.is_empty());
+}
+
+#[test]
 fn toggling_pinned_item_moves_it_after_pinned_section() {
     let mut app = AppModel::default();
     app.history.push_back(text_item("a", true));
@@ -80,22 +138,27 @@ fn toggling_pinned_item_moves_it_after_pinned_section() {
 #[test]
 fn toggle_pin_respects_max_pinned_limit() {
     let mut app = AppModel::default();
-    for i in 0..history::MAX_PINNED {
+    app.settings = test_settings(30, 5);
+
+    for i in 0..app.settings.max_pinned {
         app.history.push_back(text_item(&format!("pin-{i}"), true));
     }
     app.history.push_back(text_item("unpinned", false));
 
-    let _ = update(&mut app, Message::TogglePin(history::MAX_PINNED));
+    let max_pinned = app.settings.max_pinned;
+    let _ = update(&mut app, Message::TogglePin(max_pinned));
 
-    assert_eq!(history::pinned_count(&app.history), history::MAX_PINNED);
-    assert_eq!(item_text(&app.history[history::MAX_PINNED]), "unpinned");
-    assert!(!app.history[history::MAX_PINNED].pinned);
+    assert_eq!(history::pinned_count(&app.history), app.settings.max_pinned);
+    assert_eq!(item_text(&app.history[app.settings.max_pinned]), "unpinned");
+    assert!(!app.history[app.settings.max_pinned].pinned);
 }
 
 #[test]
 fn clipboard_changed_trims_to_max_history() {
     let mut app = AppModel::default();
-    for i in 0..history::MAX_HISTORY {
+    app.settings = test_settings(30, 5);
+
+    for i in 0..app.settings.max_history {
         app.history
             .push_back(text_item(&format!("item-{i}"), false));
     }
@@ -105,12 +168,51 @@ fn clipboard_changed_trims_to_max_history() {
         Message::ClipboardChanged(text_entry("fresh-entry")),
     );
 
-    assert_eq!(app.history.len(), history::MAX_HISTORY);
+    assert_eq!(app.history.len(), app.settings.max_history);
     assert_eq!(
         item_text(app.history.front().expect("front entry exists")),
         "fresh-entry"
     );
     assert!(!app.history.iter().any(|it| item_text(it) == "item-29"));
+}
+
+#[test]
+fn reconcile_limits_unpins_overflow_then_reorders() {
+    let mut history_vec = std::collections::VecDeque::new();
+    history_vec.push_back(text_item("a", true));
+    history_vec.push_back(text_item("b", true));
+    history_vec.push_back(text_item("c", true));
+    history_vec.push_back(text_item("d", false));
+
+    let settings = test_settings(10, 2);
+    history::reconcile_limits(&mut history_vec, &settings);
+
+    assert!(history_vec[0].pinned);
+    assert!(history_vec[1].pinned);
+    assert!(!history_vec[2].pinned);
+    assert_eq!(item_text(&history_vec[0]), "a");
+    assert_eq!(item_text(&history_vec[1]), "b");
+    assert_eq!(item_text(&history_vec[2]), "c");
+}
+
+#[test]
+fn reconcile_limits_trims_oldest_unpinned_first() {
+    let mut history_vec = std::collections::VecDeque::new();
+    history_vec.push_back(text_item("p0", true));
+    for i in 0..30 {
+        history_vec.push_back(text_item(&format!("u{i}"), false));
+    }
+
+    let settings = test_settings(30, 1);
+    history::reconcile_limits(&mut history_vec, &settings);
+
+    assert_eq!(history_vec.len(), 30);
+    assert_eq!(item_text(&history_vec[0]), "p0");
+    assert_eq!(item_text(&history_vec[1]), "u0");
+    assert_eq!(
+        item_text(history_vec.back().expect("last entry exists")),
+        "u28"
+    );
 }
 
 #[test]
@@ -235,6 +337,34 @@ fn hover_entry_none_clears_hover_state() {
     assert!(app.hovered_focus.is_none());
 }
 
+#[test]
+fn redundant_hover_entry_does_not_clear_keyboard_focus() {
+    let mut app = AppModel::default();
+    app.history.push_back(text_item("item", false));
+    app.hovered_index = Some(0);
+    app.hovered_focus = Some((0, FocusPart::Entry));
+    app.keyboard_focus = Some((0, FocusPart::Remove));
+
+    let _ = update(&mut app, Message::HoverEntry(Some((0, FocusPart::Entry))));
+
+    assert_eq!(app.hovered_index, Some(0));
+    assert_eq!(app.hovered_focus, Some((0, FocusPart::Entry)));
+    assert_eq!(app.keyboard_focus, Some((0, FocusPart::Remove)));
+}
+
+#[test]
+fn hover_entry_action_exit_can_fall_back_to_entry_without_clearing() {
+    let mut app = AppModel::default();
+    app.history.push_back(text_item("item", false));
+
+    let _ = update(&mut app, Message::HoverEntry(Some((0, FocusPart::Pin))));
+    assert_eq!(app.hovered_focus, Some((0, FocusPart::Pin)));
+
+    let _ = update(&mut app, Message::HoverEntry(Some((0, FocusPart::Entry))));
+    assert_eq!(app.hovered_index, Some(0));
+    assert_eq!(app.hovered_focus, Some((0, FocusPart::Entry)));
+}
+
 // ── Keyboard nav with filtered results ───────────────────────────────────────
 
 #[test]
@@ -244,6 +374,7 @@ fn move_selection_down_steps_through_filtered_indices() {
     app.history.push_back(text_item("banana", false)); // idx 1 – no match
     app.history.push_back(text_item("apricot", false)); // idx 2 – matches
     app.search_query = "ap".into();
+    app.recompute_filtered_indices();
 
     // First press: no previous selection → picks first filtered idx (0)
     let _ = update(&mut app, Message::MoveSelectionDown);
@@ -265,6 +396,7 @@ fn move_selection_up_wraps_to_last_filtered_index() {
     app.history.push_back(text_item("banana", false)); // idx 1
     app.history.push_back(text_item("apricot", false)); // idx 2
     app.search_query = "ap".into();
+    app.recompute_filtered_indices();
 
     // No selection → Up picks last filtered (idx 2)
     let _ = update(&mut app, Message::MoveSelectionUp);
@@ -276,16 +408,151 @@ fn move_selection_up_wraps_to_last_filtered_index() {
 }
 
 #[test]
+fn toggle_settings_panel_opens_and_prefills_draft() {
+    let mut app = AppModel::default();
+    app.settings = AppSettings {
+        max_history: 444,
+        max_pinned: 33,
+        max_image_bytes: 3 * 1024 * 1024,
+        max_image_dimension_px: 2048,
+        ..AppSettings::default()
+    }
+    .normalized();
+
+    let _ = update(&mut app, Message::ToggleSettingsPanel);
+
+    assert!(app.settings_open);
+    assert_eq!(app.settings_draft.max_history, "444");
+    assert_eq!(app.settings_draft.max_pinned, "33");
+    assert_eq!(
+        app.settings_draft.max_image_bytes,
+        (3 * 1024 * 1024).to_string()
+    );
+    assert_eq!(app.settings_draft.max_image_dimension_px, "2048");
+}
+
+#[test]
+fn apply_settings_rejects_invalid_input_with_error() {
+    let mut app = AppModel::default();
+    app.settings_open = true;
+    app.settings_draft.max_history = "not-a-number".into();
+    app.settings_draft.max_pinned = "10".into();
+    app.settings_draft.max_image_bytes = "1048576".into();
+    app.settings_draft.max_image_dimension_px = "2048".into();
+
+    let _ = update(&mut app, Message::ApplySettings);
+
+    assert!(app.settings_open);
+    assert!(app.settings_error.is_some());
+}
+
+#[test]
+fn apply_settings_rejects_out_of_range_values() {
+    let mut app = AppModel::default();
+    app.settings_open = true;
+    app.settings_draft.max_history = "1".into();
+    app.settings_draft.max_pinned = "0".into();
+    app.settings_draft.max_image_bytes = "1048576".into();
+    app.settings_draft.max_image_dimension_px = "1024".into();
+
+    let _ = update(&mut app, Message::ApplySettings);
+
+    assert!(app.settings_open);
+    let err = app.settings_error.expect("range error should be present");
+    assert!(err.contains("Max history must be between"));
+}
+
+#[test]
+fn apply_settings_rejects_pinned_greater_than_history() {
+    let mut app = AppModel::default();
+    app.settings_open = true;
+    app.settings_draft.max_history = "100".into();
+    app.settings_draft.max_pinned = "101".into();
+    app.settings_draft.max_image_bytes = "1048576".into();
+    app.settings_draft.max_image_dimension_px = "1024".into();
+
+    let _ = update(&mut app, Message::ApplySettings);
+
+    assert!(app.settings_open);
+    assert_eq!(
+        app.settings_error.as_deref(),
+        Some("Max pinned cannot be greater than max history")
+    );
+}
+
+#[test]
+fn apply_settings_rejects_image_bytes_below_minimum() {
+    let mut app = AppModel::default();
+    app.settings_open = true;
+    app.settings_draft.max_history = "200".into();
+    app.settings_draft.max_pinned = "20".into();
+    app.settings_draft.max_image_bytes = "1".into();
+    app.settings_draft.max_image_dimension_px = "1024".into();
+
+    let _ = update(&mut app, Message::ApplySettings);
+
+    assert!(app.settings_open);
+    let err = app.settings_error.expect("range error should be present");
+    assert!(err.contains("Max image bytes must be between"));
+}
+
+#[test]
+fn apply_settings_updates_runtime_settings_and_closes_panel() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("time should be after unix epoch")
+        .as_nanos();
+    let cfg_path = std::env::temp_dir().join(format!("clippy-land-test-settings-{unique}.toml"));
+    unsafe { std::env::set_var("CLIPPY_LAND_CONFIG", &cfg_path) };
+
+    let mut app = AppModel::default();
+    app.settings_open = true;
+    app.settings_draft.max_history = "350".into();
+    app.settings_draft.max_pinned = "30".into();
+    app.settings_draft.max_image_bytes = "2097152".into();
+    app.settings_draft.max_image_dimension_px = "4096".into();
+
+    let _ = update(&mut app, Message::ApplySettings);
+
+    assert!(!app.settings_open);
+    assert!(app.settings_error.is_none());
+    assert_eq!(app.settings.max_history, 350);
+    assert_eq!(app.settings.max_pinned, 30);
+    assert_eq!(app.settings.max_image_bytes, 2 * 1024 * 1024);
+    assert_eq!(app.settings.max_image_dimension_px, 4096);
+
+    let persisted = std::fs::read_to_string(&cfg_path).expect("settings should be written");
+    assert!(persisted.contains("max_history = 350"));
+    assert!(persisted.contains("max_pinned = 30"));
+
+    let _ = std::fs::remove_file(cfg_path);
+    unsafe { std::env::remove_var("CLIPPY_LAND_CONFIG") };
+}
+
+#[test]
 fn move_selection_does_nothing_when_filtered_list_is_empty() {
     let mut app = AppModel::default();
     app.history.push_back(text_item("apple", false));
     app.search_query = "zzz".into();
+    app.recompute_filtered_indices();
 
     let _ = update(&mut app, Message::MoveSelectionDown);
     assert!(app.hovered_index.is_none());
 
     let _ = update(&mut app, Message::MoveSelectionUp);
     assert!(app.hovered_index.is_none());
+}
+
+#[test]
+fn search_changed_recomputes_filtered_indices_cache() {
+    let mut app = AppModel::default();
+    app.history.push_back(text_item("apple", false));
+    app.history.push_back(text_item("banana", false));
+    app.recompute_filtered_indices();
+    assert_eq!(app.filtered_indices, vec![0, 1]);
+
+    let _ = update(&mut app, Message::SearchChanged("ap".into()));
+    assert_eq!(app.filtered_indices, vec![0]);
 }
 
 // ── MoveFocusLeft / MoveFocusRight ───────────────────────────────────────────
@@ -391,6 +658,8 @@ fn window_unfocused_only_closes_layer_surface_popups() {
 
 #[test]
 fn ipc_signal_path_is_none_when_env_var_unset() {
+    unsafe { std::env::remove_var("CLIPPY_LAND_SIGNAL_FILE") };
+
     // Temporarily remove XDG_RUNTIME_DIR if present
     let saved = std::env::var("XDG_RUNTIME_DIR").ok();
     unsafe { std::env::remove_var("XDG_RUNTIME_DIR") };
@@ -406,6 +675,7 @@ fn ipc_signal_path_is_none_when_env_var_unset() {
 
 #[test]
 fn ipc_signal_path_appends_filename_to_runtime_dir() {
+    unsafe { std::env::remove_var("CLIPPY_LAND_SIGNAL_FILE") };
     unsafe { std::env::set_var("XDG_RUNTIME_DIR", "/tmp/test-runtime") };
 
     let result = crate::ipc::get_signal_file_path();
@@ -419,4 +689,25 @@ fn ipc_signal_path_appends_filename_to_runtime_dir() {
         Some("clippy-land-toggle")
     );
     assert!(path.to_string_lossy().starts_with("/tmp/test-runtime"));
+}
+
+#[test]
+fn ipc_signal_path_prefers_override_env_var() {
+    unsafe {
+        std::env::set_var("CLIPPY_LAND_SIGNAL_FILE", "/tmp/clippy-land-test-signal");
+        std::env::set_var("XDG_RUNTIME_DIR", "/tmp/test-runtime-ignored");
+    }
+
+    let result = crate::ipc::get_signal_file_path();
+
+    unsafe {
+        std::env::remove_var("CLIPPY_LAND_SIGNAL_FILE");
+        std::env::remove_var("XDG_RUNTIME_DIR");
+    }
+
+    let path = result.expect("override signal path should be returned");
+    assert_eq!(
+        path,
+        std::path::PathBuf::from("/tmp/clippy-land-test-signal")
+    );
 }

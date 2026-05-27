@@ -5,6 +5,7 @@ on:
     tags:
       - 'v*'
     branches:
+      - main
       - test
   workflow_dispatch:  # allows manual runs from the Actions tab to test builds
 
@@ -50,6 +51,9 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v5
+
+      - name: Verify Flatpak cargo sources
+        run: python3 scripts/check-cargo-sources.py
 
       - name: Resolve version
         id: version

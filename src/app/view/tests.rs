@@ -1,4 +1,4 @@
-use super::summary::summarize_one_line;
+use super::summary::{summarize_one_line, summarize_one_line_with_limit};
 use crate::app::AppModel;
 use crate::app::model::HistoryItem;
 use crate::app::view::popup::filtered_indices;
@@ -16,6 +16,24 @@ fn truncates_long_lines_with_ellipsis() {
     assert_eq!(
         summarize_one_line(input),
         "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefg…"
+    );
+}
+
+#[test]
+fn summarize_with_custom_limit_allows_longer_expansion() {
+    let input = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnop";
+    assert_eq!(
+        summarize_one_line_with_limit(input, 150),
+        "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnop"
+    );
+}
+
+#[test]
+fn summarize_with_custom_limit_truncates_to_requested_length() {
+    let input = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnop";
+    assert_eq!(
+        summarize_one_line_with_limit(input, 20),
+        "abcdefghijklmnopqrs…"
     );
 }
 

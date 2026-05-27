@@ -7,9 +7,27 @@ mod uri;
 mod tests;
 
 pub use model::{ClipboardEntry, ClipboardFingerprint};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
-const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+const DEFAULT_MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 const THUMBNAIL_SIZE_PX: u32 = 400;
+const DEFAULT_MAX_IMAGE_DIMENSION_PX: u32 = 8192;
+
+static MAX_IMAGE_BYTES: AtomicUsize = AtomicUsize::new(DEFAULT_MAX_IMAGE_BYTES);
+static MAX_IMAGE_DIMENSION_PX: AtomicU32 = AtomicU32::new(DEFAULT_MAX_IMAGE_DIMENSION_PX);
+
+pub fn configure_limits(max_image_bytes: usize, max_image_dimension_px: u32) {
+    MAX_IMAGE_BYTES.store(max_image_bytes, Ordering::Relaxed);
+    MAX_IMAGE_DIMENSION_PX.store(max_image_dimension_px, Ordering::Relaxed);
+}
+
+pub(super) fn max_image_bytes() -> usize {
+    MAX_IMAGE_BYTES.load(Ordering::Relaxed)
+}
+
+pub(super) fn max_image_dimension_px() -> u32 {
+    MAX_IMAGE_DIMENSION_PX.load(Ordering::Relaxed)
+}
 
 pub fn read_clipboard_entry() -> Option<ClipboardEntry> {
     io::read_clipboard_entry()

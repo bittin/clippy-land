@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: check-cargo-sources
+        name: Check Flatpak Cargo sources match Cargo.lock
+        entry: python3 scripts/check-cargo-sources.py
+        language: system
+        pass_filenames: false
+        files: ^(Cargo\.toml|Cargo\.lock|cargo-sources\.json|scripts/check-cargo-sources\.py)$

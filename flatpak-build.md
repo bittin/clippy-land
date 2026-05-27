@@ -22,7 +22,14 @@ flatpak install -y --user flathub org.freedesktop.Sdk//25.08 org.freedesktop.Pla
 flatpak install -y --user flathub org.freedesktop.Sdk.Extension.rust-stable//25.08
 flatpak install -y --user cosmic com.system76.Cosmic.BaseApp//stable
 
-# 4. Build locally (from the clippy-land project root):
+# 4. Verify the generated Cargo sources match Cargo.lock
+uv run scripts/check-cargo-sources.py
+# If this fails after a dependency update, run:
+# ./generate-cargo-sources.sh
+# uv run scripts/check-cargo-sources.py
+# Then commit the updated cargo-sources.json.
+
+# 5. Build locally (from the clippy-land project root):
 flatpak-builder \
   --user \
   --install \
@@ -31,10 +38,10 @@ flatpak-builder \
   build-dir \
   io.github.k33wee.clippy-land.json
 
-# 5. Run it
+# 6. Run it
 flatpak run --user io.github.k33wee.clippy-land
 
-# 6. Run the manifest linter
+# 7. Run the manifest linter
 flatpak run --command=flatpak-builder-lint org.flatpak.Builder \
   manifest io.github.k33wee.clippy-land.json
 ```

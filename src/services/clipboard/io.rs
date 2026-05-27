@@ -2,7 +2,7 @@ use super::image::{
     clipboard_entry_from_image_bytes, clipboard_entry_from_image_path, log_image_too_large,
 };
 use super::uri::parse_first_local_path_from_uri_list;
-use super::{ClipboardEntry, MAX_IMAGE_BYTES, debug_log};
+use super::{ClipboardEntry, debug_log, max_image_bytes};
 use std::io::Read;
 use wl_clipboard_rs::{
     copy::{MimeType as CopyMimeType, Options as CopyOptions, Source},
@@ -64,11 +64,12 @@ pub fn read_clipboard_image() -> Option<ClipboardEntry> {
         };
 
         let mut bytes = Vec::new();
-        let mut limited = pipe.take((MAX_IMAGE_BYTES + 1) as u64);
+        let max_image_bytes = max_image_bytes();
+        let mut limited = pipe.take((max_image_bytes + 1) as u64);
         if limited.read_to_end(&mut bytes).is_err() {
             continue;
         }
-        if bytes.len() > MAX_IMAGE_BYTES {
+        if bytes.len() > max_image_bytes {
             log_image_too_large(bytes.len());
             continue;
         }

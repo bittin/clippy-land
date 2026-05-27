@@ -20,6 +20,12 @@ pub enum Message {
     HistoryScrolled(scrollable::Viewport),
     /// Search query changed — filters the visible history items.
     SearchChanged(String),
+    ToggleSettingsPanel,
+    SettingsMaxHistoryChanged(String),
+    SettingsMaxPinnedChanged(String),
+    SettingsMaxImageBytesChanged(String),
+    SettingsMaxImageDimensionChanged(String),
+    ApplySettings,
     /// Move the selection up (keyboard)
     MoveSelectionUp,
     /// Move the selection down (keyboard)

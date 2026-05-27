@@ -39,6 +39,21 @@ pub(super) fn transparent_icon_button_style(_theme: &cosmic::Theme) -> ButtonSty
     ButtonStyle::default()
 }
 
+/// Transparent icon button style that keeps the icon accent-colored.
+/// Used to preserve pinned-state visual feedback for symbolic theme icons.
+pub(super) fn accent_icon_button_style(theme: &cosmic::Theme) -> ButtonStyle {
+    let c = theme.cosmic();
+    let accent: Color = c.accent.base.into();
+
+    ButtonStyle {
+        background: Some(Background::Color(Color::TRANSPARENT)),
+        border_radius: c.corner_radii.radius_s.into(),
+        icon_color: Some(accent),
+        text_color: Some(accent),
+        ..Default::default()
+    }
+}
+
 pub(super) fn transparent_entry_button_style(theme: &cosmic::Theme) -> ButtonStyle {
     let c = theme.cosmic();
     let on_color: Color = theme.current_container().component.on.into();

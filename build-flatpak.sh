@@ -14,6 +14,9 @@ if [[ ! -f cargo-sources.json ]]; then
     ./generate-cargo-sources.sh
 fi
 
+echo "→ Checking cargo-sources.json against Cargo.lock..."
+python3 scripts/check-cargo-sources.py
+
 # Create a temporary local manifest:
 # - uses the current directory as source (not the pinned git commit)
 # - strips com.system76.Cosmic.BaseApp which is only available on pop-os

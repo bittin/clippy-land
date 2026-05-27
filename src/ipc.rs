@@ -18,6 +18,13 @@ use cosmic::iced::stream::channel;
 /// Get the signal file path for IPC toggle functionality.
 /// Returns None if XDG_RUNTIME_DIR is not set.
 pub fn get_signal_file_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("CLIPPY_LAND_SIGNAL_FILE") {
+        let path = PathBuf::from(path);
+        if !path.as_os_str().is_empty() {
+            return Some(path);
+        }
+    }
+
     std::env::var("XDG_RUNTIME_DIR")
         .ok()
         .map(|runtime_dir| PathBuf::from(runtime_dir).join("clippy-land-toggle"))

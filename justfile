@@ -49,3 +49,15 @@ uninstall:
 # Clean build artifacts
 clean:
     cargo clean
+
+# Run unit/integration tests
+test:
+    cargo test
+
+# Run Wayland clipboard round-trip unit tests (ignored by default)
+test-wayland:
+    CLIPPY_LAND_RUN_WAYLAND_TESTS=1 cargo test -- --ignored
+
+# Run UI-level Wayland E2E clipboard tests via --toggle
+e2e:
+    ./tests/e2e/run.sh

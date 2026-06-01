@@ -87,6 +87,25 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.5.1" date="2026-05-28">
+      <url type="details">https://github.com/k33wee/clippy-land/releases/tag/v0.5.1</url>
+      <description>
+        <p>- Introduce text preview overlay for multiline entries; adds
+keyboard/escape handling and keyboard navigation for preview
+- Implement popup open timing diagnostics with trace API and new event
+messages</p>
+      </description>
+    </release>
+    <release version="0.5.0" date="2026-05-20">
+      <url type="details">https://github.com/k33wee/clippy-land/releases/tag/v0.5.0</url>
+      <description>
+        <p>- Improved clipboard history navigation with smoother hover and keyboard movement between entries.
+- Kept expand-on-hover and expand-on-keyboard behavior while making row interactions more reliable.
+- Added in-popup Settings with validation and immediate apply for history/pinned/image limits.
+- Improved image handling stability and responsiveness for large or malformed clipboard images.
+- add French translation</p>
+      </description>
+    </release>
     <release version="0.4.1" date="2026-04-27">
       <url type="details">https://github.com/k33wee/clippy-land/releases/tag/v0.4.1</url>
       <description>

@@ -56,6 +56,7 @@ impl cosmic::Application for AppModel {
         app.recompute_filtered_indices();
 
         if flags.open_popup_on_start {
+            app.begin_popup_open_trace("startup");
             let new_id = cosmic::iced::window::Id::unique();
             app.popup = Some(new_id);
             app.popup_is_layer_surface = true;

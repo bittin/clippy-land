@@ -1,6 +1,7 @@
 use super::{history, scroll};
 use crate::app::model::{FocusPart, HistoryItem, SettingsDraft};
 use crate::app::view::filtered_indices;
+use crate::app::view::summary::text_overlay_available;
 use crate::app::{AppModel, Message};
 use crate::services::clipboard::{self, ClipboardEntry};
 use crate::settings::AppSettings;
@@ -42,11 +43,25 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
             history::insert_after_pins(&mut app.history, HistoryItem { entry, pinned });
             history::trim_history(&mut app.history, &app.settings);
             prune_thumbnail_handles(app);
+            app.text_overlay_index = None;
             app.recompute_filtered_indices();
         }
         Message::TogglePin(index) => {
             history::toggle_pin(&mut app.history, index, &app.settings);
+            app.text_overlay_index = None;
             app.recompute_filtered_indices();
+        }
+        Message::OpenTextOverlay(index) => {
+            if app
+                .history
+                .get(index)
+                .is_some_and(|item| matches!(item.entry, ClipboardEntry::Text(_)))
+            {
+                app.text_overlay_index = Some(index);
+            }
+        }
+        Message::CloseTextOverlay => {
+            app.text_overlay_index = None;
         }
         Message::CopyFromHistory(index) => {
             if let Some(item) = app.history.get(index) {
@@ -56,11 +71,13 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
         Message::RemoveHistory(index) => {
             let _ = app.history.remove(index);
             prune_thumbnail_handles(app);
+            app.text_overlay_index = None;
             app.recompute_filtered_indices();
         }
         Message::ClearHistory => {
             app.history.clear();
             app.thumbnail_handles.clear();
+            app.text_overlay_index = None;
             app.recompute_filtered_indices();
         }
         Message::HoverEntry(opt) => {
@@ -125,9 +142,17 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
                         app.keyboard_focus = Some((h, FocusPart::Entry));
                     }
                 } else {
+                    let has_preview = row_has_preview(app, idx);
                     let new_part = match part {
                         FocusPart::Entry => FocusPart::Remove,
-                        FocusPart::Pin => FocusPart::Entry,
+                        FocusPart::Preview => FocusPart::Entry,
+                        FocusPart::Pin => {
+                            if has_preview {
+                                FocusPart::Preview
+                            } else {
+                                FocusPart::Entry
+                            }
+                        }
                         FocusPart::Remove => FocusPart::Pin,
                     };
                     app.keyboard_focus = Some((idx, new_part));
@@ -143,8 +168,16 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
                         app.keyboard_focus = Some((h, FocusPart::Entry));
                     }
                 } else {
+                    let has_preview = row_has_preview(app, idx);
                     let new_part = match part {
-                        FocusPart::Entry => FocusPart::Pin,
+                        FocusPart::Entry => {
+                            if has_preview {
+                                FocusPart::Preview
+                            } else {
+                                FocusPart::Pin
+                            }
+                        }
+                        FocusPart::Preview => FocusPart::Pin,
                         FocusPart::Pin => FocusPart::Remove,
                         FocusPart::Remove => FocusPart::Entry,
                     };
@@ -160,6 +193,11 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
                     FocusPart::Entry => {
                         if let Some(item) = app.history.get(idx) {
                             history::copy_history_item(item);
+                        }
+                    }
+                    FocusPart::Preview => {
+                        if row_has_preview(app, idx) {
+                            app.text_overlay_index = Some(idx);
                         }
                     }
                     FocusPart::Pin => {
@@ -178,9 +216,17 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
                 }
             }
         }
+        Message::EscapePressed => {
+            if app.text_overlay_index.is_some() {
+                app.text_overlay_index = None;
+            } else {
+                return update(app, Message::TogglePopup);
+            }
+        }
         Message::SearchChanged(query) => {
             app.search_query = query;
             app.recompute_filtered_indices();
+            app.text_overlay_index = None;
             app.hovered_index = None;
             app.hovered_focus = None;
             app.keyboard_focus = None;
@@ -188,6 +234,7 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
         Message::ToggleSettingsPanel => {
             app.settings_open = !app.settings_open;
             app.settings_error = None;
+            app.text_overlay_index = None;
             if app.settings_open {
                 app.settings_draft = SettingsDraft::from_settings(&app.settings);
             }
@@ -305,6 +352,7 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
             );
             history::reconcile_limits(&mut app.history, &app.settings);
             prune_thumbnail_handles(app);
+            app.text_overlay_index = None;
             app.recompute_filtered_indices();
         }
         Message::TogglePopup => {
@@ -314,12 +362,16 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
                 app.search_query.clear();
                 app.settings_open = false;
                 app.settings_error = None;
+                app.text_overlay_index = None;
+                app.cancel_popup_open_trace("popup toggled closed before first view");
                 if is_layer {
                     destroy_layer_surface(p)
                 } else {
                     destroy_popup(p)
                 }
             } else {
+                warm_thumbnail_handles(app);
+                app.begin_popup_open_trace("icon-click");
                 let new_id = cosmic::iced::window::Id::unique();
                 app.popup.replace(new_id);
                 app.popup_is_layer_surface = false;
@@ -340,12 +392,16 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
                 app.search_query.clear();
                 app.settings_open = false;
                 app.settings_error = None;
+                app.text_overlay_index = None;
+                app.cancel_popup_open_trace("ipc toggle closed popup before first view");
                 if is_layer {
                     destroy_layer_surface(p)
                 } else {
                     destroy_popup(p)
                 }
             } else {
+                warm_thumbnail_handles(app);
+                app.begin_popup_open_trace("ipc-toggle");
                 let new_id = cosmic::iced::window::Id::unique();
                 app.popup.replace(new_id);
                 app.popup_is_layer_surface = true;
@@ -364,6 +420,16 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
                 })
             };
         }
+        Message::PopupOpened(id) => {
+            if app.popup.as_ref() == Some(&id) {
+                app.note_popup_opened();
+            }
+        }
+        Message::PopupRedraw(id) => {
+            if app.popup.as_ref() == Some(&id) {
+                app.finish_popup_open_trace_on_redraw();
+            }
+        }
         Message::WindowUnfocused(id) => {
             if app.popup.as_ref() == Some(&id) && app.popup_is_layer_surface {
                 return if let Some(p) = app.popup.take() {
@@ -374,6 +440,8 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
                     app.hovered_index = None;
                     app.at_scroll_bottom = false;
                     app.history_viewport = None;
+                    app.text_overlay_index = None;
+                    app.cancel_popup_open_trace("window lost focus before first redraw");
                     destroy_layer_surface(p)
                 } else {
                     Task::none()
@@ -390,6 +458,8 @@ pub(super) fn update(app: &mut AppModel, message: Message) -> Task<cosmic::Actio
                 app.hovered_index = None;
                 app.at_scroll_bottom = false;
                 app.history_viewport = None;
+                app.text_overlay_index = None;
+                app.cancel_popup_open_trace("popup closed before first redraw");
             }
         }
     }
@@ -421,6 +491,24 @@ fn prune_thumbnail_handles(app: &mut AppModel) {
     });
 }
 
+fn warm_thumbnail_handles(app: &mut AppModel) {
+    for item in app.history.iter() {
+        let ClipboardEntry::Image {
+            bytes,
+            hash,
+            thumbnail_png: Some(thumbnail_png),
+            ..
+        } = &item.entry
+        else {
+            continue;
+        };
+
+        app.thumbnail_handles
+            .entry((*hash, bytes.len()))
+            .or_insert_with(|| ImageHandle::from_bytes(thumbnail_png.clone()));
+    }
+}
+
 fn parse_usize_field(input: &str) -> Result<usize, &'static str> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -439,4 +527,14 @@ fn parse_u32_field(input: &str) -> Result<u32, &'static str> {
     trimmed
         .parse::<u32>()
         .map_err(|_| "must be a valid positive integer")
+}
+
+fn row_has_preview(app: &AppModel, idx: usize) -> bool {
+    app.history
+        .get(idx)
+        .and_then(|item| match &item.entry {
+            ClipboardEntry::Text(text) => Some(text_overlay_available(text)),
+            ClipboardEntry::Image { .. } => None,
+        })
+        .unwrap_or(false)
 }

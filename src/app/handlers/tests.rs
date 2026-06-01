@@ -1,5 +1,6 @@
 use super::{history, scroll, update};
 use crate::app::model::{FocusPart, HistoryItem};
+use crate::app::view;
 use crate::app::{AppModel, Message};
 use crate::services::clipboard;
 use crate::settings::AppSettings;
@@ -118,6 +119,30 @@ fn clear_history_clears_thumbnail_handles() {
     let _ = update(&mut app, Message::ClearHistory);
     assert!(app.history.is_empty());
     assert!(app.thumbnail_handles.is_empty());
+}
+
+#[test]
+fn open_text_overlay_sets_overlay_index_for_text_entry() {
+    let mut app = AppModel::default();
+    app.history
+        .push_back(text_item("first line\nsecond line", false));
+
+    let _ = update(&mut app, Message::OpenTextOverlay(0));
+
+    assert_eq!(app.text_overlay_index, Some(0));
+}
+
+#[test]
+fn open_text_overlay_ignores_image_entries() {
+    let mut app = AppModel::default();
+    app.history.push_back(HistoryItem {
+        entry: image_entry(9),
+        pinned: false,
+    });
+
+    let _ = update(&mut app, Message::OpenTextOverlay(0));
+
+    assert!(app.text_overlay_index.is_none());
 }
 
 #[test]
@@ -555,6 +580,65 @@ fn search_changed_recomputes_filtered_indices_cache() {
     assert_eq!(app.filtered_indices, vec![0]);
 }
 
+#[test]
+fn search_changed_closes_text_overlay() {
+    let mut app = AppModel::default();
+    app.history.push_back(text_item("overlay text", false));
+    app.text_overlay_index = Some(0);
+
+    let _ = update(&mut app, Message::SearchChanged("over".into()));
+
+    assert!(app.text_overlay_index.is_none());
+}
+
+#[test]
+fn close_text_overlay_message_clears_overlay_index() {
+    let mut app = AppModel::default();
+    app.history.push_back(text_item("overlay text", false));
+    app.text_overlay_index = Some(0);
+
+    let _ = update(&mut app, Message::CloseTextOverlay);
+
+    assert!(app.text_overlay_index.is_none());
+}
+
+#[test]
+fn close_text_overlay_message_is_noop_when_overlay_not_open() {
+    let mut app = AppModel::default();
+    app.history.push_back(text_item("overlay text", false));
+
+    let _ = update(&mut app, Message::CloseTextOverlay);
+
+    assert!(app.text_overlay_index.is_none());
+}
+
+#[test]
+fn escape_pressed_closes_overlay_without_closing_popup() {
+    let mut app = AppModel::default();
+    let popup_id = cosmic::iced::window::Id::unique();
+    app.popup = Some(popup_id);
+    app.history
+        .push_back(text_item("first line\nsecond line", false));
+    app.text_overlay_index = Some(0);
+
+    let _ = update(&mut app, Message::EscapePressed);
+
+    assert_eq!(app.popup, Some(popup_id));
+    assert!(app.text_overlay_index.is_none());
+}
+
+#[test]
+fn escape_pressed_closes_popup_when_overlay_not_open() {
+    let mut app = AppModel::default();
+    let popup_id = cosmic::iced::window::Id::unique();
+    app.popup = Some(popup_id);
+    app.popup_is_layer_surface = true;
+
+    let _ = update(&mut app, Message::EscapePressed);
+
+    assert!(app.popup.is_none());
+}
+
 // ── MoveFocusLeft / MoveFocusRight ───────────────────────────────────────────
 
 #[test]
@@ -563,6 +647,27 @@ fn move_focus_right_cycles_entry_pin_remove() {
     app.history.push_back(text_item("item", false));
     app.hovered_index = Some(0);
     app.keyboard_focus = Some((0, FocusPart::Entry));
+
+    let _ = update(&mut app, Message::MoveFocusRight);
+    assert_eq!(app.keyboard_focus, Some((0, FocusPart::Pin)));
+
+    let _ = update(&mut app, Message::MoveFocusRight);
+    assert_eq!(app.keyboard_focus, Some((0, FocusPart::Remove)));
+
+    let _ = update(&mut app, Message::MoveFocusRight);
+    assert_eq!(app.keyboard_focus, Some((0, FocusPart::Entry)));
+}
+
+#[test]
+fn move_focus_right_cycles_entry_preview_pin_remove_when_preview_available() {
+    let mut app = AppModel::default();
+    app.history
+        .push_back(text_item("first line\nsecond line", false));
+    app.hovered_index = Some(0);
+    app.keyboard_focus = Some((0, FocusPart::Entry));
+
+    let _ = update(&mut app, Message::MoveFocusRight);
+    assert_eq!(app.keyboard_focus, Some((0, FocusPart::Preview)));
 
     let _ = update(&mut app, Message::MoveFocusRight);
     assert_eq!(app.keyboard_focus, Some((0, FocusPart::Pin)));
@@ -589,6 +694,39 @@ fn move_focus_left_cycles_entry_remove_pin() {
 
     let _ = update(&mut app, Message::MoveFocusLeft);
     assert_eq!(app.keyboard_focus, Some((0, FocusPart::Entry)));
+}
+
+#[test]
+fn move_focus_left_cycles_entry_remove_pin_preview_when_preview_available() {
+    let mut app = AppModel::default();
+    app.history
+        .push_back(text_item("first line\nsecond line", false));
+    app.hovered_index = Some(0);
+    app.keyboard_focus = Some((0, FocusPart::Entry));
+
+    let _ = update(&mut app, Message::MoveFocusLeft);
+    assert_eq!(app.keyboard_focus, Some((0, FocusPart::Remove)));
+
+    let _ = update(&mut app, Message::MoveFocusLeft);
+    assert_eq!(app.keyboard_focus, Some((0, FocusPart::Pin)));
+
+    let _ = update(&mut app, Message::MoveFocusLeft);
+    assert_eq!(app.keyboard_focus, Some((0, FocusPart::Preview)));
+
+    let _ = update(&mut app, Message::MoveFocusLeft);
+    assert_eq!(app.keyboard_focus, Some((0, FocusPart::Entry)));
+}
+
+#[test]
+fn activate_selection_opens_text_overlay_when_preview_is_focused() {
+    let mut app = AppModel::default();
+    app.history
+        .push_back(text_item("first line\nsecond line", false));
+    app.keyboard_focus = Some((0, FocusPart::Preview));
+
+    let _ = update(&mut app, Message::ActivateSelection);
+
+    assert_eq!(app.text_overlay_index, Some(0));
 }
 
 #[test]
@@ -635,6 +773,39 @@ fn popup_closed_ignores_mismatched_id() {
 
     assert_eq!(app.popup, Some(real_id));
     assert_eq!(app.search_query, "query");
+}
+
+#[test]
+fn popup_open_trace_starts_on_open_and_clears_after_first_view() {
+    let mut app = AppModel::default();
+    app.history.push_back(text_item("row", false));
+    app.recompute_filtered_indices();
+    let popup_id = cosmic::iced::window::Id::unique();
+    app.popup = Some(popup_id);
+
+    app.begin_popup_open_trace("test");
+    assert!(app.popup_open_trace_pending_for_test());
+
+    let _ = view::view_window(&app, popup_id);
+    assert!(app.popup_open_trace_pending_for_test());
+
+    let _ = update(&mut app, Message::PopupRedraw(popup_id));
+    assert!(!app.popup_open_trace_pending_for_test());
+}
+
+#[test]
+fn popup_closed_cancels_pending_popup_open_trace() {
+    let mut app = AppModel::default();
+    app.history.push_back(text_item("row", false));
+    app.recompute_filtered_indices();
+    let popup_id = cosmic::iced::window::Id::unique();
+    app.popup = Some(popup_id);
+
+    app.begin_popup_open_trace("test");
+    assert!(app.popup_open_trace_pending_for_test());
+
+    let _ = update(&mut app, Message::PopupClosed(popup_id));
+    assert!(!app.popup_open_trace_pending_for_test());
 }
 
 // ── WindowUnfocused ──────────────────────────────────────────────────────────

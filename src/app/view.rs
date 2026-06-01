@@ -1,7 +1,7 @@
 mod popup;
 mod row;
 mod style;
-mod summary;
+pub(crate) mod summary;
 
 #[cfg(test)]
 mod tests;

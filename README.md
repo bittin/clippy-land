@@ -23,9 +23,12 @@ the contents change.
   - max image byte size
   - max image dimensions
 - Smooth row behavior for text and image entries:
-  - text summaries expand on hover/focus
-  - image previews expand on hover/focus while keeping row actions stable
-- Move between entries with arrow keys ( **up/down** or **k/j** to navigate between entries, **left/right** or **h/l** to move to pin or delete buttons. You need to interact with the applet at least once to enable keyboard navigation, or open it with a custom shortcut)
+  - text rows stay collapsed in-list and expose a lens button for a large full-text preview overlay inside the popup
+  - image previews keep a fixed size and centered row actions for stable targeting
+- Move between entries with keyboard ( **up/down** or **k/j** to navigate rows; **left/right** or **h/l** to move between row actions: copy, preview (when available), pin, delete)
+- Keyboard activation and escape behavior:
+  - press **Enter** on the focused action (including text preview lens)
+  - press **Esc** to close text preview overlay first, then close popup on next press
 - Adds keyboard shortcuts for opening the history (see [Usage](#usage) below)
 
 ## Table of Contents

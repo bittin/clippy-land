@@ -1,9 +1,11 @@
 use super::row::{RowRenderState, history_row};
+use super::summary::text_overlay_available;
 use crate::app::{AppModel, Message, icons};
 use crate::fl;
 use cosmic::iced::{Alignment, Length, window::Id};
 use cosmic::prelude::*;
 use cosmic::widget;
+use std::time::Instant;
 
 pub(super) fn view(app: &AppModel) -> Element<'_, Message> {
     app.core
@@ -29,8 +31,29 @@ pub(crate) fn filtered_indices(app: &AppModel) -> Vec<usize> {
     }
 }
 
+pub(crate) fn selected_text_overlay(app: &AppModel, visible: &[usize]) -> Option<String> {
+    let active_idx = app.text_overlay_index?;
+
+    if !visible.contains(&active_idx) {
+        return None;
+    }
+
+    let item = app.history.get(active_idx)?;
+    let crate::services::clipboard::ClipboardEntry::Text(text) = &item.entry else {
+        return None;
+    };
+
+    if !text_overlay_available(text) {
+        return None;
+    }
+
+    Some(text.trim().to_string())
+}
+
 pub(super) fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
+    let build_started = Instant::now();
     let visible = filtered_indices(app);
+    let mut visible_image_count = 0usize;
     let mut history_column = widget::column::Column::new().spacing(4);
 
     if app.history.is_empty() {
@@ -59,6 +82,9 @@ pub(super) fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
             }
 
             let row_state = RowRenderState::from_app(app, idx, &app.history[idx]);
+            if matches!(row_state.content, super::row::RowContent::Image { .. }) {
+                visible_image_count += 1;
+            }
             history_column = history_column.push(history_row(row_state));
         }
     }
@@ -76,6 +102,23 @@ pub(super) fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
     .max_height(400.0)
     .clip(true)
     .width(Length::Fill);
+
+    let history_area: Element<'_, Message> =
+        if let Some(text_overlay) = selected_text_overlay(app, &visible) {
+            widget::container(
+                cosmic::iced::widget::stack([
+                    history_scrollable.into(),
+                    text_overlay_layer(text_overlay),
+                ])
+                .width(Length::Fill)
+                .height(Length::Fill),
+            )
+            .width(Length::Fill)
+            .height(380.0)
+            .into()
+        } else {
+            history_scrollable.into()
+        };
 
     let search_bar = widget::container(
         widget::search_input(fl!("search-placeholder"), &app.search_query)
@@ -95,8 +138,8 @@ pub(super) fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
             content = content.push(search_bar);
         }
 
-        content = content.push(history_scrollable);
-    }
+        content = content.push(history_area);
+    };
 
     let mut controls = widget::row::Row::new()
         .spacing(8)
@@ -128,7 +171,45 @@ pub(super) fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
         .width(Length::Fill);
     content = content.push(controls_sheet);
 
+    app.note_popup_view_built(visible.len(), visible_image_count, build_started.elapsed());
+
     app.core.applet.popup_container(content).into()
+}
+
+fn text_overlay_layer(text: String) -> Element<'static, Message> {
+    let close_button = widget::button::icon(widget::icon::from_name("window-close-symbolic"))
+        .tooltip("Close preview")
+        .on_press(Message::CloseTextOverlay)
+        .extra_small()
+        .width(Length::Shrink);
+
+    let header = widget::row::Row::new()
+        .align_y(Alignment::Center)
+        .push(widget::text::heading("Text preview"))
+        .push(widget::space().width(Length::Fill))
+        .push(close_button);
+
+    cosmic::iced::widget::opaque(
+        widget::container(
+            widget::column::Column::new()
+                .spacing(8)
+                .height(Length::Fill)
+                .push(header)
+                .push(widget::divider::horizontal::default())
+                .push(
+                    widget::scrollable(
+                        widget::container(widget::text::body(text).width(Length::Fill))
+                            .width(Length::Fill),
+                    )
+                    .height(Length::Fill)
+                    .width(Length::Fill),
+                ),
+        )
+        .class(cosmic::theme::Container::Card)
+        .padding([10, 12])
+        .height(Length::Fill)
+        .width(Length::Fill),
+    )
 }
 
 fn settings_panel(app: &AppModel) -> Element<'_, Message> {

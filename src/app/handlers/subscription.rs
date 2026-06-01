@@ -57,6 +57,19 @@ pub(super) fn subscription(app: &AppModel) -> Subscription<Message> {
         });
         subs.push(unfocus_sub);
 
+        if app.popup_open_trace_pending() {
+            let popup_lifecycle_sub = listen_with(|event, _status, window_id| match event {
+                Event::Window(cosmic::iced::window::Event::Opened { .. }) => {
+                    Some(Message::PopupOpened(window_id))
+                }
+                Event::Window(cosmic::iced::window::Event::RedrawRequested(_)) => {
+                    Some(Message::PopupRedraw(window_id))
+                }
+                _ => None,
+            });
+            subs.push(popup_lifecycle_sub);
+        }
+
         let key_sub = listen_raw(move |event, status, _| {
             if event::Status::Ignored != status {
                 return None;
@@ -72,7 +85,7 @@ pub(super) fn subscription(app: &AppModel) -> Subscription<Message> {
                     NamedKey::ArrowLeft => return Some(Message::MoveFocusLeft),
                     NamedKey::ArrowRight => return Some(Message::MoveFocusRight),
                     NamedKey::Enter => return Some(Message::ActivateSelection),
-                    NamedKey::Escape => return Some(Message::TogglePopup),
+                    NamedKey::Escape => return Some(Message::EscapePressed),
                     _ => (),
                 },
                 Event::Keyboard(keyboard::Event::KeyPressed {

@@ -9,10 +9,14 @@ pub enum Message {
     /// Toggle popup triggered externally via the --toggle CLI flag.
     ToggleViaIpc,
     PopupClosed(Id),
+    PopupOpened(Id),
+    PopupRedraw(Id),
     /// Sent when a window loses focus, used to close the layer surface popup.
     WindowUnfocused(Id),
     ClipboardChanged(clipboard::ClipboardEntry),
     TogglePin(usize),
+    OpenTextOverlay(usize),
+    CloseTextOverlay,
     RemoveHistory(usize),
     ClearHistory,
     CopyFromHistory(usize),
@@ -36,4 +40,6 @@ pub enum Message {
     MoveFocusRight,
     /// Activate the currently selected entry or focused control (Enter)
     ActivateSelection,
+    /// Escape key behavior: close overlay first, then popup.
+    EscapePressed,
 }

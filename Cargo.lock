@@ -865,7 +865,7 @@ dependencies = [
 
 [[package]]
 name = "cosmic-applet-clippy-land"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "futures-util",
  "i18n-embed",

@@ -4,6 +4,7 @@ use cosmic::prelude::*;
 use cosmic::widget;
 use cosmic::widget::button::Style as ButtonStyle;
 use cosmic::widget::container::Style as ContainerStyle;
+use std::rc::Rc;
 
 pub(super) fn highlight_history_target<'a>(
     content: Element<'a, Message>,
@@ -35,8 +36,29 @@ pub(super) fn highlight_history_target<'a>(
 /// Transparent style for icon-only buttons. Suppresses the built-in hover
 /// background so `highlight_history_target` is the sole visual indicator,
 /// giving identical feedback for both mouse and keyboard navigation.
-pub(super) fn transparent_icon_button_style(_theme: &cosmic::Theme) -> ButtonStyle {
-    ButtonStyle::default()
+pub(super) fn transparent_icon_button_style(theme: &cosmic::Theme) -> ButtonStyle {
+    let c = theme.cosmic();
+    let on_color: Color = theme.current_container().component.on.into();
+
+    ButtonStyle {
+        background: Some(Background::Color(Color::TRANSPARENT)),
+        border_radius: c.corner_radii.radius_s.into(),
+        icon_color: Some(on_color),
+        text_color: Some(on_color),
+        ..Default::default()
+    }
+}
+
+pub(super) fn container_on_svg_style() -> cosmic::theme::Svg {
+    cosmic::theme::Svg::Custom(Rc::new(|theme| cosmic::iced::widget::svg::Style {
+        color: Some(theme.current_container().component.on.into()),
+    }))
+}
+
+pub(super) fn accent_svg_style() -> cosmic::theme::Svg {
+    cosmic::theme::Svg::Custom(Rc::new(|theme| cosmic::iced::widget::svg::Style {
+        color: Some(theme.cosmic().accent.base.into()),
+    }))
 }
 
 /// Transparent icon button style that keeps the icon accent-colored.

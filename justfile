@@ -9,6 +9,7 @@ app_dir      := prefix + '/share/applications'
 icon_dir     := prefix + '/share/icons/hicolor/scalable/apps'
 metainfo_dir := prefix + '/share/metainfo'
 license_dir  := prefix + '/share/licenses/' + appid
+debug_wrapper := bin_dir + '/' + name + '-debug.sh'
 
 # default recipe
 _default:
@@ -26,7 +27,8 @@ build-release *args:
 install:
     install -Dm755 target/release/{{name}}          {{bin_dir}}/{{name}}
     install -Dm755 resources/{{name}}.sh            {{bin_dir}}/{{name}}.sh
-    install -Dm644 resources/{{appid}}.desktop      {{app_dir}}/{{appid}}.desktop
+    sh scripts/render-debug-wrapper.sh resources/{{name}}-debug.sh.in "{{bin_dir}}/{{name}}" "{{debug_wrapper}}"
+    sh scripts/render-desktop-entry.sh resources/{{appid}}.desktop "{{bin_dir}}/{{name}}" "{{app_dir}}/{{appid}}.desktop"
     install -Dm644 resources/{{appid}}.metainfo.xml {{metainfo_dir}}/{{appid}}.metainfo.xml
     install -Dm644 resources/icon.svg               {{icon_dir}}/{{appid}}.svg
     install -Dm644 resources/icon.svg               {{icon_dir}}/{{appid}}-symbolic.svg
@@ -38,6 +40,7 @@ install:
 uninstall:
     rm -f {{bin_dir}}/{{name}}
     rm -f {{bin_dir}}/{{name}}.sh
+    rm -f {{debug_wrapper}}
     rm -f {{app_dir}}/{{appid}}.desktop
     rm -f {{metainfo_dir}}/{{appid}}.metainfo.xml
     rm -f {{icon_dir}}/{{appid}}.svg
@@ -61,3 +64,11 @@ test-wayland:
 # Run UI-level Wayland E2E clipboard tests via --toggle
 e2e:
     ./tests/e2e/run.sh
+
+# Point the installed desktop entry at the debug wrapper
+enable-debug-wrapper:
+    sh scripts/render-desktop-entry.sh resources/{{appid}}.desktop "{{debug_wrapper}}" "{{app_dir}}/{{appid}}.desktop"
+
+# Restore the installed desktop entry to the normal binary
+disable-debug-wrapper:
+    sh scripts/render-desktop-entry.sh resources/{{appid}}.desktop "{{bin_dir}}/{{name}}" "{{app_dir}}/{{appid}}.desktop"

@@ -98,6 +98,7 @@ pub(super) fn subscription(app: &AppModel) -> Subscription<Message> {
                         match ch {
                             'j' | 'J' => return Some(Message::MoveSelectionDown),
                             'k' | 'K' => return Some(Message::MoveSelectionUp),
+                            'q' | 'Q' => return Some(Message::CloseTextOverlay),
                             'h' | 'H' => return Some(Message::MoveFocusLeft),
                             'l' | 'L' => return Some(Message::MoveFocusRight),
                             '\n' | '\r' => return Some(Message::ActivateSelection),

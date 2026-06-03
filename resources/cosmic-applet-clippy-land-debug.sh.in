@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+APP_EXEC='@APP_EXEC@'
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/clippy-land"
+LOG_FILE="${CLIPPY_LAND_DEBUG_LOG_FILE:-$LOG_DIR/panel-debug.log}"
+
+mkdir -p "$LOG_DIR"
+
+{
+    printf '\n[%s] starting clippy-land debug launcher (pid=%s)\n' "$(date -Iseconds 2>/dev/null || date)" "$$"
+    printf 'log file: %s\n' "$LOG_FILE"
+} >>"$LOG_FILE" 2>&1
+
+export CLIPPY_LAND_DEBUG_TIMING="${CLIPPY_LAND_DEBUG_TIMING:-1}"
+
+exec "$APP_EXEC" "$@" >>"$LOG_FILE" 2>&1

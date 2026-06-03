@@ -22,7 +22,14 @@ mkdir -p deb_build/DEBIAN \
 # Copy files
 cp target/release/$NAME deb_build/usr/bin/
 chmod 755 deb_build/usr/bin/$NAME
-cp resources/$APPID.desktop deb_build/usr/share/applications/$APPID.desktop
+sh scripts/render-debug-wrapper.sh \
+    resources/$NAME-debug.sh.in \
+    "/usr/bin/$NAME" \
+    deb_build/usr/bin/$NAME-debug.sh
+sh scripts/render-desktop-entry.sh \
+    resources/$APPID.desktop \
+    "/usr/bin/$NAME" \
+    deb_build/usr/share/applications/$APPID.desktop
 cp resources/icon.svg deb_build/usr/share/icons/hicolor/scalable/apps/$APPID.svg
 cp resources/$APPID.metainfo.xml deb_build/usr/share/metainfo/$APPID.metainfo.xml
 

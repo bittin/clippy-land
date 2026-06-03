@@ -11,7 +11,7 @@ pub struct AppFlags {
     pub open_popup_on_start: bool,
 }
 
-use crate::app::model::SettingsDraft;
+use crate::app::model::{PopupSurface, SettingsDraft};
 use crate::services::clipboard;
 use crate::settings::AppSettings;
 use cosmic::iced::platform_specific::shell::wayland::commands::layer_surface::{
@@ -20,9 +20,24 @@ use cosmic::iced::platform_specific::shell::wayland::commands::layer_surface::{
 use cosmic::iced::runtime::platform_specific::wayland::layer_surface::SctkLayerSurfaceSettings;
 use cosmic::iced::{Limits, Subscription, window::Id};
 use cosmic::prelude::*;
+use std::time::{Duration, Instant};
 
 pub(super) fn history_scroll_id() -> cosmic::iced::core::widget::Id {
     cosmic::iced::core::widget::Id::new("history-scroll")
+}
+
+pub(in crate::app) fn history_layer_surface_settings(id: Id) -> SctkLayerSurfaceSettings {
+    SctkLayerSurfaceSettings {
+        id,
+        keyboard_interactivity: KeyboardInteractivity::OnDemand,
+        anchor: layer_surface::Anchor::TOP
+            | layer_surface::Anchor::LEFT
+            | layer_surface::Anchor::RIGHT,
+        namespace: "clippy-land".into(),
+        size: Some((None, Some(400))),
+        size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
+        ..Default::default()
+    }
 }
 
 impl cosmic::Application for AppModel {
@@ -44,8 +59,23 @@ impl cosmic::Application for AppModel {
     }
 
     fn init(core: cosmic::Core, flags: Self::Flags) -> (Self, Task<cosmic::Action<Self::Message>>) {
+        let init_started = Instant::now();
+
+        let stage_started = Instant::now();
         let settings = AppSettings::load().normalized();
+        init_timing_log(
+            "settings loaded and normalized",
+            init_started,
+            stage_started.elapsed(),
+        );
+
+        let stage_started = Instant::now();
         clipboard::configure_limits(settings.max_image_bytes, settings.max_image_dimension_px);
+        init_timing_log(
+            "runtime image limits configured",
+            init_started,
+            stage_started.elapsed(),
+        );
 
         let mut app = AppModel {
             core,
@@ -53,27 +83,40 @@ impl cosmic::Application for AppModel {
             settings,
             ..Default::default()
         };
+
+        let stage_started = Instant::now();
+        icons::prewarm_popup_icons();
+        init_timing_log(
+            "popup icons prewarmed",
+            init_started,
+            stage_started.elapsed(),
+        );
+
+        let stage_started = Instant::now();
+        handlers::prewarm_for_first_popup(&mut app);
+        init_timing_log(
+            "popup thumbnail handles prewarmed",
+            init_started,
+            stage_started.elapsed(),
+        );
+
+        let stage_started = Instant::now();
         app.recompute_filtered_indices();
+        init_timing_log(
+            "filtered indices recomputed",
+            init_started,
+            stage_started.elapsed(),
+        );
 
         if flags.open_popup_on_start {
             app.begin_popup_open_trace("startup");
             let new_id = cosmic::iced::window::Id::unique();
             app.popup = Some(new_id);
-            app.popup_is_layer_surface = true;
+            app.popup_surface = Some(PopupSurface::LayerSurface);
 
             (
                 app,
-                get_layer_surface(SctkLayerSurfaceSettings {
-                    id: new_id,
-                    keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                    anchor: layer_surface::Anchor::TOP
-                        | layer_surface::Anchor::LEFT
-                        | layer_surface::Anchor::RIGHT,
-                    namespace: "clippy-land".into(),
-                    size: Some((None, Some(400))),
-                    size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
-                    ..Default::default()
-                }),
+                get_layer_surface(history_layer_surface_settings(new_id)),
             )
         } else {
             (app, Task::none())
@@ -105,4 +148,18 @@ impl cosmic::Application for AppModel {
     fn style(&self) -> Option<cosmic::iced::theme::Style> {
         Some(cosmic::applet::style())
     }
+}
+
+fn init_timing_log(label: &'static str, init_started: Instant, stage_elapsed: Duration) {
+    if std::env::var_os("CLIPPY_LAND_DEBUG_TIMING").is_some() {
+        eprintln!(
+            "[clippy-land timing] init stage: {label} at {:.2}ms (stage={:.2}ms)",
+            duration_ms(init_started.elapsed()),
+            duration_ms(stage_elapsed)
+        );
+    }
+}
+
+fn duration_ms(duration: Duration) -> f64 {
+    duration.as_secs_f64() * 1000.0
 }

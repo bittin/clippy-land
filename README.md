@@ -28,7 +28,8 @@ the contents change.
 - Move between entries with keyboard ( **up/down** or **k/j** to navigate rows; **left/right** or **h/l** to move between row actions: copy, preview (when available), pin, delete)
 - Keyboard activation and escape behavior:
   - press **Enter** on the focused action (including text preview lens)
-  - press **Esc** to close text preview overlay first, then close popup on next press
+  - press **Q** to close the text preview overlay
+  - press **Esc** to close the popup
 - Adds keyboard shortcuts for opening the history (see [Usage](#usage) below)
 
 ## Table of Contents
@@ -42,8 +43,8 @@ the contents change.
 - [Build/Install with just](#buildinstall-with-just)
 - [Testing](#testing)
 - [Install with custom paths](#install-with-custom-paths)
+- [Contributing docs](#contributing-docs)
 - [Notes](#notes)
-- [Translations](#translations)
 
 ## Cosmic Store
 
@@ -125,6 +126,8 @@ In a terminal, navigate to the directory where you downloaded the .deb file and 
 sudo apt install ./cosmic-applet-clippy-land_<version>_amd64.deb
 ```
 
+The packaged desktop entry now points directly at `/usr/bin/cosmic-applet-clippy-land`, so COSMIC will not accidentally launch an older binary from your `$PATH` during upgrades.
+
 ## Install for Fedora
 
 Thanks to [lorduskordus](https://github.com/lorduskordus) there is now an RPM package on COPR.
@@ -166,6 +169,8 @@ sudo just build
 sudo just install
 ```
 
+`just install` now renders the desktop entry with an absolute `Exec=` path for the chosen prefix, so the applet launcher stays tied to that exact install instead of whichever `cosmic-applet-clippy-land` happens to appear first in `$PATH`.
+
 ## Testing
 
 Use the provided `just` recipes:
@@ -182,6 +187,11 @@ just e2e
 ```
 
 E2E tests require a Wayland session and helper tools such as `wl-copy`, `wl-paste`, and `wtype`.
+
+## Contributing docs
+
+- For issue reporting and panel-log collection, see [DEBUGGING.md](./DEBUGGING.md).
+- For adding or updating translations, see [TRANSLATION.md](./TRANSLATION.md).
 
 ## Install with custom paths
 
@@ -205,22 +215,13 @@ All paths are derived from `prefix`:
 | `<prefix>/share/metainfo`                    | MetaInfo file            |
 | `<prefix>/share/licenses/<appid>`            | license                  |
 
+If you previously installed Clippy Land under `~/.local` and then switched to the `.deb` or another system install, remove the older user-local install first. Per the desktop entry spec, a user-local desktop file with the same ID overrides the system one, and older applet installs could also leave behind a stale `~/.local/bin/cosmic-applet-clippy-land` binary.
+
 ## Notes
 
 - App ID is currently `io.github.k33wee.clippy-land`.
+- Debug wrapper log path defaults to `${XDG_STATE_HOME:-$HOME/.local/state}/clippy-land/panel-debug.log`.
 
 ## Attribution
 
 - "Cosmic Icons" by System76 is licensed under CC-SA-4.0
-
-## Translations
-
-Clippy Land is available in the following languages, thanks to:
-
-- **English** ([k33wee](https://github.com/k33wee))
-- **Italian** ([k33wee](https://github.com/k33wee))
-- **Portuguese** ([GuilhermeTerriaga](https://github.com/GuilhermeTerriaga))
-- **Czech** ([lorduskordus](https://github.com/lorduskordus))
-- **Ukrainian** ([Dymkom](https://github.com/Dymkom))
-- **Swedish** ([bittin](https://github.com/bittin))
-- **French** ([Thovi98](https://github.com/Thovi98))

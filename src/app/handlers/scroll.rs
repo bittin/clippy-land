@@ -1,6 +1,23 @@
 use crate::app::{AppModel, Message};
-use cosmic::iced::widget::scrollable::{self, RelativeOffset, Viewport};
+use cosmic::iced::widget::scrollable::{self, AbsoluteOffset, RelativeOffset, Viewport};
 use cosmic::prelude::*;
+
+const TEXT_OVERLAY_KEYBOARD_SCROLL_DELTA: f32 = 48.0;
+
+pub(super) fn scroll_text_overlay_up() -> Task<cosmic::Action<Message>> {
+    scroll_text_overlay_by(-TEXT_OVERLAY_KEYBOARD_SCROLL_DELTA)
+}
+
+pub(super) fn scroll_text_overlay_down() -> Task<cosmic::Action<Message>> {
+    scroll_text_overlay_by(TEXT_OVERLAY_KEYBOARD_SCROLL_DELTA)
+}
+
+fn scroll_text_overlay_by(delta_y: f32) -> Task<cosmic::Action<Message>> {
+    scrollable::scroll_by(
+        crate::app::text_overlay_scroll_id(),
+        AbsoluteOffset { x: 0.0, y: delta_y },
+    )
+}
 
 pub(super) fn scroll_selection_into_view(
     app: &AppModel,

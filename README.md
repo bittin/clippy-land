@@ -15,8 +15,8 @@ the contents change.
 - Keep a history of recent clipboard entries (text + images), with configurable limits
 - Re-copy an entry with a single click
 - Remove individual entries from the history
-- Clear all entries from history with one click
-- Pin important entries to the top of the history (configurable pin limit)
+- Clear unpinned history entries with one click while keeping pinned entries saved
+- Pin important entries to the top of the history; pinned entries persist across app restarts (configurable pin limit)
 - In-popup **Settings** panel to adjust limits and apply them immediately:
   - max history entries
   - max pinned entries
@@ -28,6 +28,7 @@ the contents change.
 - Move between entries with keyboard ( **up/down** or **k/j** to navigate rows; **left/right** or **h/l** to move between row actions: copy, preview (when available), pin, delete)
 - Keyboard activation and escape behavior:
   - press **Enter** on the focused action (including text preview lens)
+  - while the text preview overlay is open, use **up/down** or **k/j** to scroll it
   - press **Q** to close the text preview overlay
   - press **Esc** to close the popup
 - Adds keyboard shortcuts for opening the history (see [Usage](#usage) below)
@@ -100,6 +101,10 @@ By default, Clippy Land starts with:
 
 Config is stored at `~/.config/clippy-land/config.toml` (or `$XDG_CONFIG_HOME/clippy-land/config.toml`), and can be overridden with `CLIPPY_LAND_CONFIG`.
 
+Pinned clipboard entries are stored separately as app state so they survive app restarts and reboots. Only pinned entries are persisted; unpinned clipboard history remains runtime-only. Text pins are saved in a small TOML manifest, while pinned images store metadata in the manifest and image/thumbnail blobs beside it. By default, pinned history is stored at `$XDG_STATE_HOME/clippy-land/pinned-history.toml` or `~/.local/state/clippy-land/pinned-history.toml`, and can be overridden with `CLIPPY_LAND_PINNED_HISTORY`.
+
+The **Clear History** action removes only unpinned entries. To remove a pinned entry, unpin it or delete that entry directly.
+
 ## Install with Flatpak
 
 1. Add the required remotes (if not already added):
@@ -163,10 +168,13 @@ sudo apt install cargo cmake just libexpat1-dev libfontconfig-dev libfreetype-de
 
 ```bash
 # build
-sudo just build
+just build
 
-# install for current user
+# install system-wide under /usr
 sudo just install
+
+# uninstall the system-wide source install
+sudo just uninstall
 ```
 
 `just install` now renders the desktop entry with an absolute `Exec=` path for the chosen prefix, so the applet launcher stays tied to that exact install instead of whichever `cosmic-applet-clippy-land` happens to appear first in `$PATH`.
@@ -198,12 +206,17 @@ E2E tests require a Wayland session and helper tools such as `wl-copy`, `wl-past
 Pass a `prefix` variable to install everything under a custom root:
 
 ```bash
-# install under ~/.local  (default is /usr)
-sudo just prefix=~/.local install
+# install under ~/.local for the current user without sudo
+just prefix="$HOME/.local" install
 
-# uninstall
-sudo just prefix=~/.local uninstall
+# uninstall the current user's ~/.local source install
+just uninstall-user
+
+# equivalent explicit form
+just prefix="$HOME/.local" uninstall
 ```
+
+If an older user-local install was created with `sudo just prefix=~/.local install`, its files may be owned by root. Remove that old root-owned local install once with `sudo just prefix="$HOME/.local" uninstall`, then use the non-sudo `~/.local` commands above for future user-local installs.
 
 All paths are derived from `prefix`:
 
@@ -215,7 +228,7 @@ All paths are derived from `prefix`:
 | `<prefix>/share/metainfo`                    | MetaInfo file            |
 | `<prefix>/share/licenses/<appid>`            | license                  |
 
-If you previously installed Clippy Land under `~/.local` and then switched to the `.deb` or another system install, remove the older user-local install first. Per the desktop entry spec, a user-local desktop file with the same ID overrides the system one, and older applet installs could also leave behind a stale `~/.local/bin/cosmic-applet-clippy-land` binary.
+If you previously installed Clippy Land under `~/.local` and then switched to the `.deb` or another system install, remove the older user-local install first with `just uninstall-user`. Per the desktop entry spec, a user-local desktop file with the same ID overrides the system one, and older applet installs could also leave behind a stale `~/.local/bin/cosmic-applet-clippy-land` binary.
 
 ## Notes
 

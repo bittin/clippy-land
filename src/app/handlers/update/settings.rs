@@ -1,6 +1,6 @@
 use super::shared::{parse_u32_field, parse_usize_field, prune_thumbnail_handles};
 use crate::app::model::SettingsDraft;
-use crate::app::{AppModel, Message};
+use crate::app::{AppModel, Message, pinned_history};
 use crate::services::clipboard;
 use crate::settings::AppSettings;
 
@@ -133,6 +133,7 @@ pub(super) fn handle(app: &mut AppModel, message: Message) -> bool {
                 app.settings.max_image_dimension_px,
             );
             history::reconcile_limits(&mut app.history, &app.settings);
+            pinned_history::save(&app.history);
             prune_thumbnail_handles(app);
             app.text_overlay_index = None;
             app.recompute_filtered_indices();

@@ -1,7 +1,7 @@
 use super::shared::{prune_thumbnail_handles, row_has_preview};
 use crate::app::model::FocusPart;
 use crate::app::view::filtered_indices;
-use crate::app::{AppModel, Message};
+use crate::app::{AppModel, Message, pinned_history};
 
 use super::super::{history, scroll};
 use cosmic::prelude::*;
@@ -32,7 +32,13 @@ pub(super) fn handle(
             app.history_viewport = Some(viewport);
             Some(Task::none())
         }
-        Message::MoveSelectionUp => {
+        Message::KeyboardNavigateUp if app.text_overlay_index.is_some() => {
+            Some(scroll::scroll_text_overlay_up())
+        }
+        Message::KeyboardNavigateDown if app.text_overlay_index.is_some() => {
+            Some(scroll::scroll_text_overlay_down())
+        }
+        Message::KeyboardNavigateUp => {
             let visible = filtered_indices(app);
             if visible.is_empty() {
                 return Some(Task::none());
@@ -50,7 +56,7 @@ pub(super) fn handle(
             app.at_scroll_bottom = false;
             Some(scroll::scroll_selection_into_view(app, new_idx))
         }
-        Message::MoveSelectionDown => {
+        Message::KeyboardNavigateDown => {
             let visible = filtered_indices(app);
             if visible.is_empty() {
                 return Some(Task::none());
@@ -136,13 +142,19 @@ pub(super) fn handle(
                         }
                     }
                     FocusPart::Pin => {
-                        history::toggle_pin(&mut app.history, idx, &app.settings);
+                        if history::toggle_pin(&mut app.history, idx, &app.settings) {
+                            pinned_history::save(&app.history);
+                        }
                         app.recompute_filtered_indices();
                     }
                     FocusPart::Remove => {
-                        let _ = app.history.remove(idx);
+                        let removed_pinned =
+                            app.history.remove(idx).is_some_and(|item| item.pinned);
                         prune_thumbnail_handles(app);
                         app.recompute_filtered_indices();
+                        if removed_pinned {
+                            pinned_history::save(&app.history);
+                        }
                     }
                 }
             } else if let Some(idx) = app.hovered_index {

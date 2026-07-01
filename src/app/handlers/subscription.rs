@@ -6,6 +6,8 @@ use cosmic::iced::futures::channel::mpsc;
 use futures_util::SinkExt;
 use std::time::Duration;
 
+use cosmic::iced::core::keyboard::key::Named as NamedKey;
+
 pub(super) fn subscription(app: &AppModel) -> Subscription<Message> {
     struct ClipboardSubscription;
 
@@ -44,7 +46,6 @@ pub(super) fn subscription(app: &AppModel) -> Subscription<Message> {
 
     if app.popup.is_some() {
         use cosmic::iced::core::keyboard;
-        use cosmic::iced::core::keyboard::key::Named as NamedKey;
         use cosmic::iced::event::{listen_raw, listen_with};
         use cosmic::iced::{Event, event};
 
@@ -79,15 +80,7 @@ pub(super) fn subscription(app: &AppModel) -> Subscription<Message> {
                 Event::Keyboard(keyboard::Event::KeyPressed {
                     key: keyboard::Key::Named(named),
                     ..
-                }) => match named {
-                    NamedKey::ArrowUp => return Some(Message::MoveSelectionUp),
-                    NamedKey::ArrowDown => return Some(Message::MoveSelectionDown),
-                    NamedKey::ArrowLeft => return Some(Message::MoveFocusLeft),
-                    NamedKey::ArrowRight => return Some(Message::MoveFocusRight),
-                    NamedKey::Enter => return Some(Message::ActivateSelection),
-                    NamedKey::Escape => return Some(Message::EscapePressed),
-                    _ => (),
-                },
+                }) => return message_for_named_key(named),
                 Event::Keyboard(keyboard::Event::KeyPressed {
                     key: keyboard::Key::Character(c),
                     physical_key,
@@ -95,15 +88,7 @@ pub(super) fn subscription(app: &AppModel) -> Subscription<Message> {
                 }) => {
                     let key_obj = keyboard::Key::Character(c.clone());
                     if let Some(ch) = key_obj.to_latin(physical_key) {
-                        match ch {
-                            'j' | 'J' => return Some(Message::MoveSelectionDown),
-                            'k' | 'K' => return Some(Message::MoveSelectionUp),
-                            'q' | 'Q' => return Some(Message::CloseTextOverlay),
-                            'h' | 'H' => return Some(Message::MoveFocusLeft),
-                            'l' | 'L' => return Some(Message::MoveFocusRight),
-                            '\n' | '\r' => return Some(Message::ActivateSelection),
-                            _ => (),
-                        }
+                        return message_for_latin_key(ch);
                     }
                 }
                 _ => (),
@@ -115,4 +100,28 @@ pub(super) fn subscription(app: &AppModel) -> Subscription<Message> {
     }
 
     Subscription::batch(subs)
+}
+
+pub(super) fn message_for_named_key(named: NamedKey) -> Option<Message> {
+    match named {
+        NamedKey::ArrowUp => Some(Message::KeyboardNavigateUp),
+        NamedKey::ArrowDown => Some(Message::KeyboardNavigateDown),
+        NamedKey::ArrowLeft => Some(Message::MoveFocusLeft),
+        NamedKey::ArrowRight => Some(Message::MoveFocusRight),
+        NamedKey::Enter => Some(Message::ActivateSelection),
+        NamedKey::Escape => Some(Message::EscapePressed),
+        _ => None,
+    }
+}
+
+pub(super) fn message_for_latin_key(ch: char) -> Option<Message> {
+    match ch {
+        'j' | 'J' => Some(Message::KeyboardNavigateDown),
+        'k' | 'K' => Some(Message::KeyboardNavigateUp),
+        'q' | 'Q' => Some(Message::CloseTextOverlay),
+        'h' | 'H' => Some(Message::MoveFocusLeft),
+        'l' | 'L' => Some(Message::MoveFocusRight),
+        '\n' | '\r' => Some(Message::ActivateSelection),
+        _ => None,
+    }
 }

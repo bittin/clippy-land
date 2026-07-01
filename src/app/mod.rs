@@ -2,6 +2,7 @@ mod handlers;
 mod icons;
 mod messages;
 mod model;
+mod pinned_history;
 mod view;
 
 pub use messages::Message;
@@ -24,6 +25,10 @@ use std::time::{Duration, Instant};
 
 pub(super) fn history_scroll_id() -> cosmic::iced::core::widget::Id {
     cosmic::iced::core::widget::Id::new("history-scroll")
+}
+
+pub(super) fn text_overlay_scroll_id() -> cosmic::iced::core::widget::Id {
+    cosmic::iced::core::widget::Id::new("text-overlay-scroll")
 }
 
 pub(in crate::app) fn history_layer_surface_settings(id: Id) -> SctkLayerSurfaceSettings {
@@ -83,6 +88,14 @@ impl cosmic::Application for AppModel {
             settings,
             ..Default::default()
         };
+
+        let stage_started = Instant::now();
+        app.history = pinned_history::load(&app.settings);
+        init_timing_log(
+            "pinned history loaded",
+            init_started,
+            stage_started.elapsed(),
+        );
 
         let stage_started = Instant::now();
         icons::prewarm_popup_icons();

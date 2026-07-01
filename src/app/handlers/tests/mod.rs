@@ -62,4 +62,5 @@ pub(super) fn test_settings(max_history: usize, max_pinned: usize) -> AppSetting
     .normalized()
 }
 
+pub(super) use super::subscription::{message_for_latin_key, message_for_named_key};
 pub(super) use super::{history, scroll};

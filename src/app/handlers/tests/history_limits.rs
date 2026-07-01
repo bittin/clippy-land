@@ -96,14 +96,16 @@ fn reconcile_limits_trims_oldest_unpinned_first() {
 }
 
 #[test]
-fn clear_history_removes_all_entries() {
+fn clear_history_preserves_pinned_entries() {
     let mut app = AppModel::default();
     app.history.push_back(text_item("pinned", true));
     app.history.push_back(text_item("regular", false));
 
     dispatch(&mut app, Message::ClearHistory);
 
-    assert!(app.history.is_empty());
+    assert_eq!(app.history.len(), 1);
+    assert!(app.history[0].pinned);
+    assert_eq!(item_text(&app.history[0]), "pinned");
 }
 
 #[test]
@@ -127,6 +129,19 @@ fn remove_history_removes_entry_at_index() {
     assert_eq!(app.history.len(), 2);
     assert_eq!(item_text(&app.history[0]), "first");
     assert_eq!(item_text(&app.history[1]), "third");
+}
+
+#[test]
+fn remove_history_can_delete_pinned_entry_directly() {
+    let mut app = AppModel::default();
+    app.history.push_back(text_item("pinned", true));
+    app.history.push_back(text_item("regular", false));
+
+    dispatch(&mut app, Message::RemoveHistory(0));
+
+    assert_eq!(app.history.len(), 1);
+    assert_eq!(item_text(&app.history[0]), "regular");
+    assert!(!app.history[0].pinned);
 }
 
 #[test]

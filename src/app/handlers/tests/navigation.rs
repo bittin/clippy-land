@@ -1,8 +1,9 @@
 use super::*;
 use crate::app::model::PopupSurface;
+use cosmic::iced::core::keyboard::key::Named as NamedKey;
 
 #[test]
-fn move_selection_down_steps_through_filtered_indices() {
+fn keyboard_navigation_down_steps_through_filtered_indices() {
     let mut app = AppModel::default();
     app.history.push_back(text_item("apple", false));
     app.history.push_back(text_item("banana", false));
@@ -10,18 +11,18 @@ fn move_selection_down_steps_through_filtered_indices() {
     app.search_query = "ap".into();
     app.recompute_filtered_indices();
 
-    dispatch(&mut app, Message::MoveSelectionDown);
+    dispatch(&mut app, Message::KeyboardNavigateDown);
     assert_eq!(app.hovered_index, Some(0));
 
-    dispatch(&mut app, Message::MoveSelectionDown);
+    dispatch(&mut app, Message::KeyboardNavigateDown);
     assert_eq!(app.hovered_index, Some(2));
 
-    dispatch(&mut app, Message::MoveSelectionDown);
+    dispatch(&mut app, Message::KeyboardNavigateDown);
     assert_eq!(app.hovered_index, Some(0));
 }
 
 #[test]
-fn move_selection_up_wraps_to_last_filtered_index() {
+fn keyboard_navigation_up_wraps_to_last_filtered_index() {
     let mut app = AppModel::default();
     app.history.push_back(text_item("apple", false));
     app.history.push_back(text_item("banana", false));
@@ -29,24 +30,24 @@ fn move_selection_up_wraps_to_last_filtered_index() {
     app.search_query = "ap".into();
     app.recompute_filtered_indices();
 
-    dispatch(&mut app, Message::MoveSelectionUp);
+    dispatch(&mut app, Message::KeyboardNavigateUp);
     assert_eq!(app.hovered_index, Some(2));
 
-    dispatch(&mut app, Message::MoveSelectionUp);
+    dispatch(&mut app, Message::KeyboardNavigateUp);
     assert_eq!(app.hovered_index, Some(0));
 }
 
 #[test]
-fn move_selection_does_nothing_when_filtered_list_is_empty() {
+fn keyboard_navigation_does_nothing_when_filtered_list_is_empty() {
     let mut app = AppModel::default();
     app.history.push_back(text_item("apple", false));
     app.search_query = "zzz".into();
     app.recompute_filtered_indices();
 
-    dispatch(&mut app, Message::MoveSelectionDown);
+    dispatch(&mut app, Message::KeyboardNavigateDown);
     assert!(app.hovered_index.is_none());
 
-    dispatch(&mut app, Message::MoveSelectionUp);
+    dispatch(&mut app, Message::KeyboardNavigateUp);
     assert!(app.hovered_index.is_none());
 }
 
@@ -84,6 +85,72 @@ fn close_text_overlay_message_is_noop_when_overlay_not_open() {
     dispatch(&mut app, Message::CloseTextOverlay);
 
     assert!(app.text_overlay_index.is_none());
+}
+
+#[test]
+fn vertical_navigation_keys_emit_keyboard_navigation_intents() {
+    assert!(matches!(
+        message_for_named_key(NamedKey::ArrowDown),
+        Some(Message::KeyboardNavigateDown)
+    ));
+    assert!(matches!(
+        message_for_named_key(NamedKey::ArrowUp),
+        Some(Message::KeyboardNavigateUp)
+    ));
+    assert!(matches!(
+        message_for_latin_key('j'),
+        Some(Message::KeyboardNavigateDown)
+    ));
+    assert!(matches!(
+        message_for_latin_key('k'),
+        Some(Message::KeyboardNavigateUp)
+    ));
+}
+
+#[test]
+fn uppercase_vim_navigation_keys_emit_keyboard_navigation_intents() {
+    assert!(matches!(
+        message_for_latin_key('J'),
+        Some(Message::KeyboardNavigateDown)
+    ));
+    assert!(matches!(
+        message_for_latin_key('K'),
+        Some(Message::KeyboardNavigateUp)
+    ));
+}
+
+#[test]
+fn overlay_closed_keyboard_navigation_moves_history_selection() {
+    let mut app = AppModel::default();
+    app.history.push_back(text_item("first", false));
+    app.history.push_back(text_item("second", false));
+    app.recompute_filtered_indices();
+
+    dispatch(&mut app, Message::KeyboardNavigateDown);
+    assert_eq!(app.hovered_index, Some(0));
+    assert_eq!(app.keyboard_focus, Some((0, FocusPart::Entry)));
+
+    dispatch(&mut app, Message::KeyboardNavigateUp);
+    assert_eq!(app.hovered_index, Some(1));
+    assert_eq!(app.keyboard_focus, Some((1, FocusPart::Entry)));
+}
+
+#[test]
+fn overlay_open_keyboard_navigation_scrolls_without_moving_history_focus() {
+    let mut app = AppModel::default();
+    app.history.push_back(text_item("first", false));
+    app.history.push_back(text_item("second", false));
+    app.text_overlay_index = Some(0);
+    app.hovered_index = Some(0);
+    app.keyboard_focus = Some((0, FocusPart::Preview));
+
+    dispatch(&mut app, Message::KeyboardNavigateDown);
+    assert_eq!(app.hovered_index, Some(0));
+    assert_eq!(app.keyboard_focus, Some((0, FocusPart::Preview)));
+
+    dispatch(&mut app, Message::KeyboardNavigateUp);
+    assert_eq!(app.hovered_index, Some(0));
+    assert_eq!(app.keyboard_focus, Some((0, FocusPart::Preview)));
 }
 
 #[test]

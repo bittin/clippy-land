@@ -79,6 +79,23 @@ fn clear_history_clears_thumbnail_handles() {
 }
 
 #[test]
+fn clear_history_retains_pinned_image_thumbnail_handles() {
+    let mut app = AppModel::default();
+
+    dispatch(&mut app, Message::ClipboardChanged(image_entry(7)));
+    dispatch(&mut app, Message::TogglePin(0));
+    assert_eq!(app.history.len(), 1);
+    assert!(app.history[0].pinned);
+    assert_eq!(app.thumbnail_handles.len(), 1);
+
+    dispatch(&mut app, Message::ClearHistory);
+
+    assert_eq!(app.history.len(), 1);
+    assert!(app.history[0].pinned);
+    assert_eq!(app.thumbnail_handles.len(), 1);
+}
+
+#[test]
 fn open_text_overlay_sets_overlay_index_for_text_entry() {
     let mut app = AppModel::default();
     app.history

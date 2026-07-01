@@ -1,6 +1,6 @@
 [package]
 name = "cosmic-applet-clippy-land"
-version = "0.5.2"
+version = "1.0.0"
 authors = ["k33wee (https://github.com/k33wee)"]
 edition = "2024"
 license = "GPL-3.0-or-later"
@@ -22,23 +22,13 @@ features = ["fluent-system", "desktop-requester"]
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
+default-features = false
 # See https://github.com/pop-os/libcosmic/blob/master/Cargo.toml for available features.
 features = [
-    # Applet support
-    "applet",
+    # COSMIC applet support. This pulls in the Wayland/winit/tokio/multi-window pieces needed by applets.
     "applet-token",
     # Uses cosmic-settings-daemon to watch for config file changes
     "dbus-config",
-    # Support creating additional application windows.
-    "multi-window",
-    # Uses tokio as the executor for the runtime
-    "tokio",
-    # Add Wayland support to winit
-    "wayland",
-    # Enable wgpu renderer path (iced fallback compositor can then prefer wgpu)
-    "wgpu",
-    # Windowing support for X11, Windows, Mac, & Redox
-    "winit",
 ]
 
 # Uncomment to test a locally-cloned libcosmic

@@ -30,10 +30,10 @@ pub enum Message {
     SettingsMaxImageBytesChanged(String),
     SettingsMaxImageDimensionChanged(String),
     ApplySettings,
-    /// Move the selection up (keyboard)
-    MoveSelectionUp,
-    /// Move the selection down (keyboard)
-    MoveSelectionDown,
+    /// Keyboard vertical navigation, resolved by current UI state.
+    KeyboardNavigateUp,
+    /// Keyboard vertical navigation, resolved by current UI state.
+    KeyboardNavigateDown,
     /// Move sub-focus left (e.g., to actions)
     MoveFocusLeft,
     /// Move sub-focus right (e.g., to actions)

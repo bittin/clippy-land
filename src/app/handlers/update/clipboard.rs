@@ -1,6 +1,6 @@
 use super::shared::{cache_thumbnail_handle, prune_thumbnail_handles};
 use crate::app::model::HistoryItem;
-use crate::app::{AppModel, Message};
+use crate::app::{AppModel, Message, pinned_history};
 use crate::services::clipboard::ClipboardEntry;
 
 use super::super::history;
@@ -36,10 +36,15 @@ pub(super) fn handle(app: &mut AppModel, message: Message) -> bool {
             prune_thumbnail_handles(app);
             app.text_overlay_index = None;
             app.recompute_filtered_indices();
+            if pinned {
+                pinned_history::save(&app.history);
+            }
             true
         }
         Message::TogglePin(index) => {
-            history::toggle_pin(&mut app.history, index, &app.settings);
+            if history::toggle_pin(&mut app.history, index, &app.settings) {
+                pinned_history::save(&app.history);
+            }
             app.text_overlay_index = None;
             app.recompute_filtered_indices();
             true
@@ -65,17 +70,21 @@ pub(super) fn handle(app: &mut AppModel, message: Message) -> bool {
             true
         }
         Message::RemoveHistory(index) => {
-            let _ = app.history.remove(index);
+            let removed_pinned = app.history.remove(index).is_some_and(|item| item.pinned);
             prune_thumbnail_handles(app);
             app.text_overlay_index = None;
             app.recompute_filtered_indices();
+            if removed_pinned {
+                pinned_history::save(&app.history);
+            }
             true
         }
         Message::ClearHistory => {
-            app.history.clear();
-            app.thumbnail_handles.clear();
+            app.history.retain(|item| item.pinned);
+            prune_thumbnail_handles(app);
             app.text_overlay_index = None;
             app.recompute_filtered_indices();
+            pinned_history::save(&app.history);
             true
         }
         Message::SearchChanged(query) => {

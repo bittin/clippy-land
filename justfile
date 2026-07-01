@@ -36,18 +36,23 @@ install:
     update-desktop-database {{app_dir}} || true
     gtk-update-icon-cache -f {{prefix}}/share/icons/hicolor || true
 
-# Uninstall
+# Uninstall from the configured prefix
 uninstall:
-    rm -f {{bin_dir}}/{{name}}
-    rm -f {{bin_dir}}/{{name}}.sh
-    rm -f {{debug_wrapper}}
-    rm -f {{app_dir}}/{{appid}}.desktop
-    rm -f {{metainfo_dir}}/{{appid}}.metainfo.xml
-    rm -f {{icon_dir}}/{{appid}}.svg
-    rm -f {{icon_dir}}/{{appid}}-symbolic.svg
-    rm -f {{license_dir}}/LICENSE
-    update-desktop-database {{app_dir}} || true
-    gtk-update-icon-cache -f {{prefix}}/share/icons/hicolor || true
+    rm -f "{{bin_dir}}/{{name}}"
+    rm -f "{{bin_dir}}/{{name}}.sh"
+    rm -f "{{debug_wrapper}}"
+    rm -f "{{app_dir}}/{{appid}}.desktop"
+    rm -f "{{metainfo_dir}}/{{appid}}.metainfo.xml"
+    rm -f "{{icon_dir}}/{{appid}}.svg"
+    rm -f "{{icon_dir}}/{{appid}}-symbolic.svg"
+    rm -f "{{license_dir}}/LICENSE"
+    rmdir --ignore-fail-on-non-empty "{{license_dir}}" || true
+    if command -v update-desktop-database >/dev/null 2>&1 && [ -d "{{app_dir}}" ]; then update-desktop-database "{{app_dir}}" || true; fi
+    if command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -d "{{prefix}}/share/icons/hicolor" ]; then gtk-update-icon-cache -f "{{prefix}}/share/icons/hicolor" || true; fi
+
+# Uninstall the current user's ~/.local source install without sudo
+uninstall-user:
+    just prefix="$HOME/.local" uninstall
 
 # Clean build artifacts
 clean:

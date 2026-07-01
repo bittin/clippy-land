@@ -55,9 +55,9 @@ pub(super) fn toggle_pin(
     history: &mut VecDeque<HistoryItem>,
     index: usize,
     settings: &AppSettings,
-) {
+) -> bool {
     let Some(mut item) = history.remove(index) else {
-        return;
+        return false;
     };
 
     let max_pinned = settings.max_pinned.min(settings.max_history);
@@ -67,12 +67,14 @@ pub(super) fn toggle_pin(
         insert_after_pins(history, item);
     } else if pinned_count(history) >= max_pinned {
         history.insert(index, item);
+        return false;
     } else {
         item.pinned = true;
         insert_after_pins(history, item);
     }
 
     reconcile_limits(history, settings);
+    true
 }
 
 pub(super) fn copy_history_item(item: &HistoryItem) {

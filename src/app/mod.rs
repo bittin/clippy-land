@@ -3,6 +3,7 @@ mod icons;
 mod messages;
 mod model;
 mod pinned_history;
+mod surfaces;
 mod view;
 
 pub use messages::Message;
@@ -12,11 +13,11 @@ pub struct AppFlags {
     pub open_popup_on_start: bool,
 }
 
-use crate::app::model::{PopupSurface, SettingsDraft};
+use crate::app::model::SettingsDraft;
 use crate::services::clipboard;
 use crate::settings::AppSettings;
 use cosmic::iced::platform_specific::shell::wayland::commands::layer_surface::{
-    self, KeyboardInteractivity, get_layer_surface,
+    self, KeyboardInteractivity,
 };
 use cosmic::iced::runtime::platform_specific::wayland::layer_surface::SctkLayerSurfaceSettings;
 use cosmic::iced::{Limits, Subscription, window::Id};
@@ -123,14 +124,9 @@ impl cosmic::Application for AppModel {
 
         if flags.open_popup_on_start {
             app.begin_popup_open_trace("startup");
-            let new_id = cosmic::iced::window::Id::unique();
-            app.popup = Some(new_id);
-            app.popup_surface = Some(PopupSurface::LayerSurface);
+            let task = surfaces::open_layer_surface_popup(&mut app);
 
-            (
-                app,
-                get_layer_surface(history_layer_surface_settings(new_id)),
-            )
+            (app, task)
         } else {
             (app, Task::none())
         }

@@ -1,10 +1,5 @@
 use super::shared::warm_thumbnail_handles;
-use crate::app::model::PopupSurface;
 use crate::app::{AppModel, Message};
-use cosmic::iced::platform_specific::shell::wayland::commands::layer_surface::{
-    destroy_layer_surface, get_layer_surface,
-};
-use cosmic::iced::platform_specific::shell::wayland::commands::popup::{destroy_popup, get_popup};
 use cosmic::prelude::*;
 use std::time::Instant;
 
@@ -67,31 +62,11 @@ fn toggle_via_ipc(app: &mut AppModel) -> Task<cosmic::Action<Message>> {
 }
 
 fn open_layer_surface_popup(app: &mut AppModel) -> Task<cosmic::Action<Message>> {
-    let new_id = cosmic::iced::window::Id::unique();
-    app.popup.replace(new_id);
-    app.popup_surface = Some(PopupSurface::LayerSurface);
-    app.popup_controls_ready = false;
-    app.note_popup_stage_marker("issuing get_layer_surface request");
-    get_layer_surface(crate::app::history_layer_surface_settings(new_id))
+    crate::app::surfaces::open_layer_surface_popup(app)
 }
 
 fn open_anchored_popup(app: &mut AppModel) -> Task<cosmic::Action<Message>> {
-    let new_id = cosmic::iced::window::Id::unique();
-    app.popup.replace(new_id);
-    app.popup_surface = Some(PopupSurface::AnchoredPopup);
-    app.popup_controls_ready = false;
-
-    let parent = app
-        .core
-        .main_window_id()
-        .unwrap_or(cosmic::iced::window::Id::RESERVED);
-    let popup_settings = app
-        .core
-        .applet
-        .get_popup_settings(parent, new_id, None, None, None);
-
-    app.note_popup_stage_marker("issuing get_popup request");
-    get_popup(popup_settings)
+    crate::app::surfaces::open_anchored_popup(app)
 }
 
 fn close_popup(app: &mut AppModel, reason: &'static str) -> Task<cosmic::Action<Message>> {
@@ -103,10 +78,7 @@ fn close_popup(app: &mut AppModel, reason: &'static str) -> Task<cosmic::Action<
 
     clear_popup_state(app, reason);
 
-    match surface {
-        Some(PopupSurface::AnchoredPopup) => destroy_popup(id),
-        Some(PopupSurface::LayerSurface) | None => destroy_layer_surface(id),
-    }
+    crate::app::surfaces::destroy_popup_surface(id, surface)
 }
 
 fn clear_popup_state(app: &mut AppModel, reason: &'static str) {
@@ -127,7 +99,9 @@ fn window_unfocused(
     app: &mut AppModel,
     id: cosmic::iced::window::Id,
 ) -> Task<cosmic::Action<Message>> {
-    if app.popup.as_ref() == Some(&id) && app.popup_surface == Some(PopupSurface::LayerSurface) {
+    if app.popup.as_ref() == Some(&id)
+        && app.popup_surface == Some(crate::app::model::PopupSurface::LayerSurface)
+    {
         close_popup(app, "window lost focus before first redraw")
     } else {
         Task::none()

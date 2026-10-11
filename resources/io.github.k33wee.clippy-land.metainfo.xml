@@ -21,7 +21,6 @@
       Kliknutím na ikonu v panelu můžete procházet, znovu kopírovat, připínat nebo mazat položky schránky, aniž byste museli přerušit svou práci.
       Poznámka: Tento applet funguje pouze v prostředí COSMIC™.
     </p>
-    </p>
     <p xml:lang="pl">
       Clippy Land jest appletem dla panelu COSMIC, który zachowuje historię poprzednio skopiowanych tekstów i obrazów.
       Kliknij w ikonę na panelu by przeglądać, ponownie kopiować, przypinać lub usuwać pozycje nie przerywając pracy.
@@ -139,6 +138,21 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.1.0" date="2026-10-11">
+      <url type="details">https://github.com/k33wee/clippy-land/releases/tag/v1.1.0</url>
+      <description>
+        <p>
+          - Popup now opens near the focused window;
+          - Enter or click pastes the selected entry and closes the popup (virtual-keyboard injection, falls back to copy-only when unavailable);
+          - Clipboard changes are watched via Wayland events instead of polling;
+          - Toggle uses session D-Bus instead of a polled file, greatly reducing idle CPU;
+          - Hardened clipboard watcher: bounded transfers, MIME-type fallback, primary-selection cleanup;
+          - Preview no longer bleeds text behind frosted glass;
+          - Frosted glass support via dependency updates;
+          - Polish translation and metainfo improvements;
+        </p>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-06-25">
       <url type="details">https://github.com/k33wee/clippy-land/releases/tag/v1.0.0</url>
       <description>

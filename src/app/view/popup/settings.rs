@@ -80,7 +80,7 @@ pub(super) fn settings_panel(app: &AppModel) -> Element<'_, Message> {
                 .on_toggle(Message::SettingsPasteOnActionToggled),
         )
         .push(widget::text::caption(
-            "After Enter or a click, closes the popup and sends Ctrl+V once focus returns to the previous app. Falls back to copy-only when virtual keyboard access is unavailable.",
+            "After Enter or a click, closes the popup and sends Ctrl+V (Ctrl+Shift+V for recognized terminals) once focus returns. Falls back to copy-only when virtual keyboard access is unavailable.",
         ));
 
     let close_popup_on_action = widget::column::Column::new()

@@ -94,13 +94,15 @@ pub(super) fn toggle_pin(
 pub(super) fn copy_history_item(
     item: &HistoryItem,
     paste_after_copy: bool,
+    tracker: crate::services::toplevel::Tracker,
 ) -> cosmic::iced::Task<cosmic::Action<crate::app::Message>> {
-    copy_clipboard_entry(&item.entry, paste_after_copy)
+    copy_clipboard_entry(&item.entry, paste_after_copy, tracker)
 }
 
 pub(super) fn copy_clipboard_entry(
     entry: &ClipboardEntry,
     paste_after_copy: bool,
+    tracker: crate::services::toplevel::Tracker,
 ) -> cosmic::iced::Task<cosmic::Action<crate::app::Message>> {
     use cosmic::prelude::*;
 
@@ -115,7 +117,7 @@ pub(super) fn copy_clipboard_entry(
                             .unwrap_or(false);
 
                     if write_succeeded {
-                        crate::services::keyboard::delayed_ctrl_v().await;
+                        crate::services::keyboard::delayed_paste(tracker).await;
                     }
                 },
                 |_| cosmic::Action::None,
@@ -137,7 +139,7 @@ pub(super) fn copy_clipboard_entry(
                     .unwrap_or(false);
 
                     if paste_after_copy && write_succeeded {
-                        crate::services::keyboard::delayed_ctrl_v().await;
+                        crate::services::keyboard::delayed_paste(tracker).await;
                     }
                 },
                 |_| cosmic::Action::None,

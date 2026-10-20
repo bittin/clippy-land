@@ -94,7 +94,7 @@ Settings are validated before apply/save. Current allowed ranges are:
 - `max_pinned`: `0..=500` and must be `<= max_history`
 - `max_image_bytes`: `262144..=67108864`
 - `max_image_dimension_px`: `512..=16384`
-- `paste_on_action`: paste an activated entry with a synthesized Ctrl+V
+- `paste_on_action`: paste an activated entry with Ctrl+V, or Ctrl+Shift+V in recognized terminals
 - `close_popup_on_action`: close the popup after activating an entry
 
 By default, Clippy Land starts with:
@@ -108,7 +108,9 @@ By default, Clippy Land starts with:
 
 Config is stored at `~/.config/clippy-land/config.toml` (or `$XDG_CONFIG_HOME/clippy-land/config.toml`), and can be overridden with `CLIPPY_LAND_CONFIG`.
 
-Auto-paste requires the compositor to expose the `zwp_virtual_keyboard_v1` Wayland protocol. If virtual-keyboard access is unavailable, Clippy Land still copies the entry and closes the popup, but does not inject Ctrl+V. COSMIC restricts this protocol on ordinary sandbox connections, but permits the privileged connection granted to panel applets. The grant is applet-level access, not a per-protocol permission dialog; no additional broad filesystem permission is needed. Without it, Flatpak installations retain the copy-only fallback.
+Auto-paste uses Ctrl+V for normal apps and Ctrl+Shift+V for recognized terminals (including COSMIC Terminal), selected from the focused window's app ID after closing the popup. This lets the terminal handle clipboard/bracketed paste into shells and nvim, rather than typing clipboard text as keystrokes. Unknown app IDs or unavailable toplevel tracking retain Ctrl+V; custom terminal keybindings may require manual paste. `wl-paste` only reads the clipboard and cannot paste into another window.
+
+Auto-paste requires the compositor to expose the `zwp_virtual_keyboard_v1` Wayland protocol. If virtual-keyboard access is unavailable, Clippy Land still copies the entry and closes the popup, but does not inject a paste shortcut. COSMIC restricts this protocol on ordinary sandbox connections, but permits the privileged connection granted to panel applets. The grant is applet-level access, not a per-protocol permission dialog; no additional broad filesystem permission is needed. Without it, Flatpak installations retain the copy-only fallback.
 
 Pinned clipboard entries are stored separately as app state so they survive app restarts and reboots. Only pinned entries are persisted; unpinned clipboard history remains runtime-only. Text pins are saved in a small TOML manifest, while pinned images store metadata in the manifest and image/thumbnail blobs beside it. By default, pinned history is stored at `$XDG_STATE_HOME/clippy-land/pinned-history.toml` or `~/.local/state/clippy-land/pinned-history.toml`, and can be overridden with `CLIPPY_LAND_PINNED_HISTORY`.
 

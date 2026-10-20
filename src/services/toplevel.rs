@@ -153,13 +153,15 @@ pub struct OutputSize {
 }
 
 /// Latest knowledge about the focused toplevel.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Snapshot {
     /// Geometry of the activated toplevel relative to the output where it
     /// covers the largest area, or `None` when no toplevel is focused.
     pub focused_window: Option<WindowRect>,
     /// Logical size of the same output as `focused_window`.
     pub focused_output: Option<OutputSize>,
+    /// App identity used to select the paste shortcut, independent of geometry.
+    pub focused_app_id: Option<String>,
 }
 
 /// `zcosmic_toplevel_handle_v1.state` array value marking the activated
@@ -175,6 +177,7 @@ impl WindowKey for u64 {}
 #[derive(Debug, Clone)]
 struct WindowRecord<K: WindowKey> {
     activated: bool,
+    app_id: Option<String>,
     rects: HashMap<K, WindowRect>,
 }
 
@@ -182,6 +185,7 @@ impl<K: WindowKey> Default for WindowRecord<K> {
     fn default() -> Self {
         Self {
             activated: false,
+            app_id: None,
             rects: HashMap::new(),
         }
     }
@@ -193,6 +197,7 @@ impl<K: WindowKey> Default for WindowRecord<K> {
 struct TrackerCore<K: WindowKey> {
     windows: HashMap<K, WindowRecord<K>>,
     outputs: HashMap<K, OutputSize>,
+    focused: Option<K>,
 }
 
 impl<K: WindowKey> Default for TrackerCore<K> {
@@ -200,6 +205,7 @@ impl<K: WindowKey> Default for TrackerCore<K> {
         Self {
             windows: HashMap::new(),
             outputs: HashMap::new(),
+            focused: None,
         }
     }
 }
@@ -210,7 +216,20 @@ impl<K: WindowKey> TrackerCore<K> {
     }
 
     fn set_activated(&mut self, key: K, activated: bool) {
-        self.windows.entry(key).or_default().activated = activated;
+        let record = self.windows.entry(key.clone()).or_default();
+        // Activation and deactivation events for different windows need not
+        // arrive together. Prefer the newest activation, not the largest
+        // window, and do not let repeated state events steal focus back.
+        if activated && !record.activated {
+            self.focused = Some(key);
+        } else if !activated && self.focused.as_ref() == Some(&key) {
+            self.focused = None;
+        }
+        record.activated = activated;
+    }
+
+    fn set_app_id(&mut self, key: K, app_id: String) {
+        self.windows.entry(key).or_default().app_id = Some(app_id);
     }
 
     fn set_geometry(&mut self, key: K, output: K, rect: WindowRect) {
@@ -229,6 +248,9 @@ impl<K: WindowKey> TrackerCore<K> {
 
     fn remove(&mut self, key: &K) {
         self.windows.remove(key);
+        if self.focused.as_ref() == Some(key) {
+            self.focused = None;
+        }
     }
 
     fn set_output_size(&mut self, output: K, size: OutputSize) {
@@ -243,19 +265,21 @@ impl<K: WindowKey> TrackerCore<K> {
     }
 
     fn snapshot(&self) -> Snapshot {
-        let focused = self
-            .windows
-            .values()
-            .filter(|record| record.activated)
-            .flat_map(|record| record.rects.iter())
-            .filter(|(_, rect)| rect.width > 0 && rect.height > 0)
-            .max_by_key(|(_, rect)| i64::from(rect.width) * i64::from(rect.height));
+        let focused = self.focused.as_ref().and_then(|key| self.windows.get(key));
+        let geometry = focused.and_then(|record| {
+            record
+                .rects
+                .iter()
+                .filter(|(_, rect)| rect.width > 0 && rect.height > 0)
+                .max_by_key(|(_, rect)| i64::from(rect.width) * i64::from(rect.height))
+        });
         Snapshot {
-            focused_window: focused.map(|(_, rect)| *rect),
-            focused_output: focused
+            focused_window: geometry.map(|(_, rect)| *rect),
+            focused_output: geometry
                 .and_then(|(output, _)| self.outputs.get(output))
                 .copied()
                 .filter(|size| size.width > 0 && size.height > 0),
+            focused_app_id: focused.and_then(|record| record.app_id.clone()),
         }
     }
 }
@@ -405,13 +429,22 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for TrackerState {
     ) {
         use protocols::foreign_toplevel_list::client::ext_foreign_toplevel_handle_v1::Event;
 
-        if let Event::Closed = event {
-            if let Some(cosmic_handle) = state.foreign_handles.remove(&proxy.id()) {
-                state.core.remove(&cosmic_handle.id());
-                cosmic_handle.destroy();
+        match event {
+            Event::AppId { app_id } => {
+                if let Some(handle) = state.foreign_handles.get(&proxy.id()) {
+                    state.core.set_app_id(handle.id(), app_id);
+                    state.publish();
+                }
             }
-            proxy.destroy();
-            state.publish();
+            Event::Closed => {
+                if let Some(cosmic_handle) = state.foreign_handles.remove(&proxy.id()) {
+                    state.core.remove(&cosmic_handle.id());
+                    cosmic_handle.destroy();
+                }
+                proxy.destroy();
+                state.publish();
+            }
+            _ => {}
         }
     }
 }
@@ -490,7 +523,7 @@ impl Tracker {
     /// processed any events (startup, unsupported compositor, sandboxed
     /// client).  Never blocks meaningfully.
     pub fn snapshot(&self) -> Option<Snapshot> {
-        self.snapshot.lock().ok().and_then(|guard| *guard)
+        self.snapshot.lock().ok().and_then(|guard| guard.clone())
     }
 
     /// Creates a tracker and starts its background listener thread.
@@ -745,6 +778,59 @@ mod tests {
             },
         );
         assert_eq!(core.snapshot().focused_output, None);
+    }
+
+    #[test]
+    fn focused_app_id_does_not_require_geometry() {
+        let mut core: TrackerCore<u64> = TrackerCore::default();
+        core.set_app_id(1, "com.system76.CosmicTerm".into());
+        core.set_activated(1, true);
+        assert_eq!(
+            core.snapshot().focused_app_id.as_deref(),
+            Some("com.system76.CosmicTerm")
+        );
+        assert_eq!(core.snapshot().focused_window, None);
+        core.set_app_id(1, "foot".into());
+        assert_eq!(core.snapshot().focused_app_id.as_deref(), Some("foot"));
+    }
+
+    #[test]
+    fn app_id_tracks_focus_changes_and_window_closure() {
+        let mut core: TrackerCore<u64> = TrackerCore::default();
+        core.set_app_id(1, "com.system76.CosmicTerm".into());
+        core.set_app_id(2, "firefox".into());
+        assert_eq!(core.snapshot().focused_app_id, None);
+        core.set_activated(1, true);
+        assert_eq!(
+            core.snapshot().focused_app_id.as_deref(),
+            Some("com.system76.CosmicTerm")
+        );
+        core.set_activated(1, false);
+        assert_eq!(core.snapshot().focused_app_id, None);
+        core.set_activated(2, true);
+        assert_eq!(core.snapshot().focused_app_id.as_deref(), Some("firefox"));
+        core.remove(&2);
+        assert_eq!(core.snapshot().focused_app_id, None);
+    }
+
+    #[test]
+    fn focused_app_id_and_geometry_refer_to_the_same_window() {
+        let mut core: TrackerCore<u64> = TrackerCore::default();
+        core.set_app_id(1, "com.system76.CosmicTerm".into());
+        core.set_geometry(1, 10, rect(0, 0, 800, 600));
+        core.set_app_id(2, "firefox".into());
+        core.set_geometry(2, 10, rect(0, 0, 400, 300));
+        // During a transition with two activated records, use the newest
+        // activation even if it belongs to the smaller window.
+        core.set_activated(1, true);
+        core.set_activated(2, true);
+        assert_eq!(core.snapshot().focused_app_id.as_deref(), Some("firefox"));
+        assert_eq!(core.snapshot().focused_window, Some(rect(0, 0, 400, 300)));
+        core.set_activated(1, true); // Duplicate state from the older window.
+        assert_eq!(core.snapshot().focused_app_id.as_deref(), Some("firefox"));
+        core.set_activated(1, false); // Delayed deactivation must not clear it.
+        core.remove(&1);
+        assert_eq!(core.snapshot().focused_app_id.as_deref(), Some("firefox"));
     }
 
     #[test]

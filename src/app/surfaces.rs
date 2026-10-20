@@ -34,6 +34,7 @@ pub(in crate::app) fn plan_toggle_popup(snapshot: Option<Snapshot>) -> TogglePop
     let Some(Snapshot {
         focused_window: Some(window),
         focused_output: Some(output),
+        ..
     }) = snapshot
     else {
         return TogglePopupPlacement::ActiveMonitorStrip;
@@ -66,6 +67,7 @@ pub(in crate::app) fn plan_toggle_popup(snapshot: Option<Snapshot>) -> TogglePop
 pub(in crate::app) fn open_layer_surface_popup(
     app: &mut AppModel,
 ) -> Task<cosmic::Action<Message>> {
+    app.pending_paste = None;
     let new_id = Id::unique();
     app.popup.replace(new_id);
     app.popup_surface = Some(PopupSurface::LayerSurface);
@@ -83,6 +85,7 @@ pub(in crate::app) fn open_layer_surface_popup(
 }
 
 pub(in crate::app) fn open_anchored_popup(app: &mut AppModel) -> Task<cosmic::Action<Message>> {
+    app.pending_paste = None;
     let new_id = Id::unique();
     app.popup.replace(new_id);
     app.popup_surface = Some(PopupSurface::AnchoredPopup);
@@ -106,11 +109,17 @@ pub(in crate::app) fn destroy_popup_surface(
     id: Id,
     surface: Option<PopupSurface>,
 ) -> Task<cosmic::Action<Message>> {
-    let action = match surface {
-        Some(PopupSurface::AnchoredPopup) => action::destroy_popup(id),
-        Some(PopupSurface::LayerSurface) | None => action::destroy_layer_shell(id),
-    };
-    surface_task(action)
+    use cosmic::iced::platform_specific::shell::commands;
+
+    // Return the runtime destroy command itself, not a Surface message that
+    // schedules it on a later app update. Auto-paste also waits for the
+    // backend's PopupClosed acknowledgement before starting clipboard work.
+    match surface {
+        Some(PopupSurface::AnchoredPopup) => commands::popup::destroy_popup(id),
+        Some(PopupSurface::LayerSurface) | None => {
+            commands::layer_surface::destroy_layer_surface(id)
+        }
+    }
 }
 
 fn default_live_settings(_: &AppModel) -> LiveSettings {
@@ -126,6 +135,49 @@ mod tests {
     use super::*;
     use crate::services::toplevel::OutputSize;
 
+    #[tokio::test]
+    async fn popup_teardown_is_issued_before_chained_clipboard_work() {
+        use cosmic::iced::futures::StreamExt;
+        use cosmic::iced::runtime::{Action as RuntimeAction, platform_specific, task};
+        use platform_specific::wayland;
+
+        for surface in [
+            Some(PopupSurface::AnchoredPopup),
+            Some(PopupSurface::LayerSurface),
+            None,
+        ] {
+            let id = Id::unique();
+            let close_then_copy =
+                destroy_popup_surface(id, surface).chain(Task::done(cosmic::Action::None));
+            let actions = task::into_stream(close_then_copy)
+                .unwrap()
+                .collect::<Vec<_>>()
+                .await;
+            assert_eq!(actions.len(), 2);
+            match (&actions[0], surface) {
+                (
+                    RuntimeAction::PlatformSpecific(platform_specific::Action::Wayland(
+                        wayland::Action::Popup(wayland::popup::Action::Destroy { id: closed }),
+                    )),
+                    Some(PopupSurface::AnchoredPopup),
+                ) => assert_eq!(*closed, id),
+                (
+                    RuntimeAction::PlatformSpecific(platform_specific::Action::Wayland(
+                        wayland::Action::LayerSurface(wayland::layer_surface::Action::Destroy(
+                            closed,
+                        )),
+                    )),
+                    Some(PopupSurface::LayerSurface) | None,
+                ) => assert_eq!(*closed, id),
+                _ => panic!("teardown must be a runtime command, not a deferred app message"),
+            }
+            assert!(matches!(
+                &actions[1],
+                RuntimeAction::Output(cosmic::Action::None)
+            ));
+        }
+    }
+
     fn rect(x: i32, y: i32, width: i32, height: i32) -> WindowRect {
         WindowRect {
             x,
@@ -139,6 +191,7 @@ mod tests {
         Some(Snapshot {
             focused_window: Some(window),
             focused_output: Some(OutputSize { width, height }),
+            ..Snapshot::default()
         })
     }
 
@@ -163,6 +216,7 @@ mod tests {
             plan_toggle_popup(Some(Snapshot {
                 focused_window: Some(rect(10, 10, 800, 600)),
                 focused_output: None,
+                ..Snapshot::default()
             })),
             TogglePopupPlacement::ActiveMonitorStrip
         );

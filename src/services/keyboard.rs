@@ -1,10 +1,10 @@
 //! Synthesized paste keystrokes via the `zwp_virtual_keyboard_v1` protocol.
 //!
-//! While the clipboard popup is open it holds keyboard focus.  When an entry is
-//! activated the popup is destroyed first, the compositor restores focus to the
-//! previously active window, and only then is a Ctrl+V keystroke injected
-//! through a short-lived virtual keyboard so the freshly written clipboard
-//! contents land in that window.
+//! When an entry is activated, the popup is destroyed first so the compositor
+//! can restore focus. Normal apps receive Ctrl+V; known terminals receive
+//! Ctrl+Shift+V so their own clipboard/bracketed-paste handling also works for
+//! applications such as nvim. Clipboard text is never typed as individual keys:
+//! newlines could execute shell commands, and nvim may be in normal mode.
 //!
 //! The compositor must advertise `zwp_virtual_keyboard_manager_v1`. COSMIC
 //! permits it on the panel-granted privileged connection, including for Flatpak
@@ -25,8 +25,10 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
 };
 
-/// Linux evdev keycode for `KEY_V`.
+/// Linux evdev keycode for `KEY_V` (XKB keycode 55 in the shortcut keymap).
 const KEY_V: u32 = 47;
+const KEY_LEFTCTRL: u32 = 29;
+const KEY_LEFTSHIFT: u32 = 42;
 /// `wl_keyboard` key state: released.
 const KEY_STATE_RELEASED: u32 = 0;
 /// `wl_keyboard` key state: pressed.
@@ -37,13 +39,60 @@ const KEYMAP_FORMAT_XKB_V1: u32 = 1;
 /// How long a synthesized key press is reported as held (timestamps only).
 const KEY_HOLD_MS: u32 = 40;
 
-/// Delay between an action being triggered and the Ctrl+V injection, giving
-/// the compositor time to destroy the popup and restore keyboard focus to the
-/// previously active window.
+/// Give the compositor time to destroy the popup and restore keyboard focus.
 const DEFAULT_PASTE_DELAY_MS: u64 = 250;
-
 /// Upper bound for the `CLIPPY_LAND_PASTE_DELAY_MS` debug override.
 const MAX_PASTE_DELAY_MS: u64 = 5_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PasteShortcut {
+    CtrlV,
+    CtrlShiftV,
+}
+
+impl PasteShortcut {
+    fn modifier_keys(self) -> &'static [u32] {
+        match self {
+            Self::CtrlV => &[KEY_LEFTCTRL],
+            Self::CtrlShiftV => &[KEY_LEFTCTRL, KEY_LEFTSHIFT],
+        }
+    }
+
+    fn for_app_id(app_id: Option<&str>) -> Self {
+        // Match application identities, never window titles: a browser page or
+        // document mentioning a terminal must not change its paste shortcut.
+        let app_id = app_id.unwrap_or_default().to_ascii_lowercase();
+        match app_id.as_str() {
+            "com.system76.cosmicterm"
+            | "alacritty"
+            | "org.alacritty.alacritty"
+            | "kitty"
+            | "net.kovidgoyal.kitty"
+            | "foot"
+            | "footclient"
+            | "org.codeberg.dnkl.foot"
+            | "gnome-terminal"
+            | "gnome-terminal-server"
+            | "org.gnome.terminal"
+            | "kgx"
+            | "org.gnome.console"
+            | "konsole"
+            | "org.kde.konsole"
+            | "wezterm"
+            | "org.wezfurlong.wezterm"
+            | "org.wezterm.wezterm"
+            | "ghostty"
+            | "com.mitchellh.ghostty"
+            | "xfce4-terminal"
+            | "terminator"
+            | "tilix"
+            | "com.gexperts.tilix"
+            | "blackbox"
+            | "com.raggesilver.blackbox" => Self::CtrlShiftV,
+            _ => Self::CtrlV,
+        }
+    }
+}
 
 static PROCESS_START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
@@ -53,7 +102,7 @@ fn monotonic_ms() -> u32 {
     base.elapsed().as_millis() as u32
 }
 
-/// How long to wait after closing the popup before injecting Ctrl+V.
+/// How long to wait after closing the popup before injecting a paste shortcut.
 ///
 /// `CLIPPY_LAND_PASTE_DELAY_MS` overrides the default for debugging.
 pub fn paste_delay() -> Duration {
@@ -115,10 +164,10 @@ impl KeyboardClient {
         Ok(())
     }
 
-    fn send_ctrl_v(&mut self) -> Result<(), String> {
+    fn send_paste(&mut self, shortcut: PasteShortcut) -> Result<(), String> {
         self.bind_keyboard()?;
         // Do fallible local work before creating a protocol object.
-        let (keymap_text, ctrl_mask) = compile_keymap_and_ctrl_mask()?;
+        let (keymap_text, modifier_mask) = compile_paste_keymap(shortcut)?;
         let mut keymap_bytes = keymap_text.into_bytes();
         // XKB text keymaps are NUL-terminated, including the advertised size.
         keymap_bytes.push(0);
@@ -138,9 +187,9 @@ impl KeyboardClient {
             keymap_bytes.len() as u32,
         );
 
-        let result = self.send_keys(&keyboard, ctrl_mask);
+        let result = self.send_keys(&keyboard, shortcut, modifier_mask);
         // Destroy even if a roundtrip fails, rather than leaving a virtual
-        // keyboard (and possibly its Control modifier) alive.
+        // keyboard (and possibly its modifiers) alive.
         keyboard.destroy();
         self.conn
             .flush()
@@ -148,30 +197,51 @@ impl KeyboardClient {
         result
     }
 
-    fn send_keys(&mut self, keyboard: &ZwpVirtualKeyboardV1, ctrl_mask: u32) -> Result<(), String> {
+    fn send_keys(
+        &mut self,
+        keyboard: &ZwpVirtualKeyboardV1,
+        shortcut: PasteShortcut,
+        modifier_mask: u32,
+    ) -> Result<(), String> {
         let mut state = KeyboardState;
         self.queue
             .roundtrip(&mut state)
             .map_err(|err| format!("keymap roundtrip: {err}"))?;
         let press_time = monotonic_ms();
-        keyboard.modifiers(ctrl_mask, 0, 0, 0);
+        // COSMIC activates the virtual device's keymap on its first key event,
+        // which resets a modifier mask sent before that event. Real modifier
+        // key presses both activate the map and establish the intended state.
+        for &key in shortcut.modifier_keys() {
+            keyboard.key(press_time, key, KEY_STATE_PRESSED);
+        }
+        keyboard.modifiers(modifier_mask, 0, 0, 0);
         keyboard.key(press_time, KEY_V, KEY_STATE_PRESSED);
-        self.queue
+        let press_result = self
+            .queue
             .roundtrip(&mut state)
-            .map_err(|err| format!("key press roundtrip: {err}"))?;
-        std::thread::sleep(Duration::from_millis(2));
-        keyboard.key(press_time + KEY_HOLD_MS, KEY_V, KEY_STATE_RELEASED);
+            .map_err(|err| format!("key press roundtrip: {err}"));
+        if press_result.is_ok() {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        // Always attempt every release, even if the press roundtrip failed.
+        let release_time = press_time.wrapping_add(KEY_HOLD_MS);
+        keyboard.key(release_time, KEY_V, KEY_STATE_RELEASED);
+        for &key in shortcut.modifier_keys().iter().rev() {
+            keyboard.key(release_time, key, KEY_STATE_RELEASED);
+        }
         keyboard.modifiers(0, 0, 0, 0);
-        self.queue
+        let release_result = self
+            .queue
             .roundtrip(&mut state)
-            .map_err(|err| format!("key release roundtrip: {err}"))?;
-        Ok(())
+            .map_err(|err| format!("key release roundtrip: {err}"));
+        press_result.and(release_result).map(|_| ())
     }
 }
 
-/// Injects Ctrl+V into the currently focused window. Blocking because it uses
-/// Wayland round-trips; intended for `spawn_blocking`.
-pub fn send_ctrl_v() -> Result<(), String> {
+/// Look up the focused app only after the popup has closed and the paste delay
+/// has elapsed. A snapshot taken when the popup holds focus can be empty, and
+/// one taken before opening it can be stale if the user changes windows.
+fn send_paste(tracker: &super::toplevel::Tracker) -> Result<(), String> {
     let mut client = KEYBOARD
         .get_or_init(|| Mutex::new(None))
         .lock()
@@ -180,17 +250,24 @@ pub fn send_ctrl_v() -> Result<(), String> {
         // A failed connection must not permanently disable future pastes.
         *client = Some(KeyboardClient::connect()?);
     }
+    let snapshot = tracker.snapshot();
+    let app_id = snapshot
+        .as_ref()
+        .and_then(|snapshot| snapshot.focused_app_id.as_deref());
+    let shortcut = PasteShortcut::for_app_id(app_id);
+    if std::env::var_os("CLIPPY_LAND_DEBUG_CLIPBOARD").is_some() {
+        eprintln!("[clippy-land] paste shortcut: {shortcut:?}, app_id={app_id:?}");
+    }
     client
         .as_mut()
         .expect("keyboard initialized above")
-        .send_ctrl_v()
+        .send_paste(shortcut)
 }
 
-/// Sleeps the paste delay, then injects Ctrl+V.  Async counterpart used by the
-/// copy handler so the popup has already been closed by the time this runs.
-pub async fn delayed_ctrl_v() {
+/// Wait for focus to return, then ask the focused app to paste the clipboard.
+pub async fn delayed_paste(tracker: super::toplevel::Tracker) {
     tokio::time::sleep(paste_delay()).await;
-    let result = tokio::task::spawn_blocking(send_ctrl_v)
+    let result = tokio::task::spawn_blocking(move || send_paste(&tracker))
         .await
         .unwrap_or_else(|err| Err(format!("virtual keyboard task failed: {err}")));
     if let Err(err) = result {
@@ -204,30 +281,37 @@ fn log_paste_failure(reason: &str) {
     }
 }
 
-/// Compiles the default xkb keymap (honouring `XKB_DEFAULT_*` environment
-/// variables) and returns its serialized text form plus the modifier-state bit
-/// for Control in that keymap.
-fn compile_keymap_and_ctrl_mask() -> Result<(String, u32), String> {
+/// Use a deterministic US keymap for this shortcut-only virtual device. The
+/// physical KEY_V position need not produce 'v' in XKB_DEFAULT_LAYOUT (Dvorak,
+/// for example), and a Shift override must not change the intended shortcut.
+fn compile_paste_keymap(shortcut: PasteShortcut) -> Result<(String, u32), String> {
     let context = xkbcommon::xkb::Context::new(xkbcommon::xkb::CONTEXT_NO_FLAGS);
     let keymap = xkbcommon::xkb::Keymap::new_from_names(
         &context,
+        "evdev",
+        "pc105",
+        "us",
         "",
-        "",
-        "",
-        "",
-        None,
+        Some("".to_string()),
         xkbcommon::xkb::KEYMAP_COMPILE_NO_FLAGS,
     )
     .ok_or_else(|| "failed to compile xkb keymap".to_string())?;
 
-    let ctrl_index = keymap.mod_get_index(xkbcommon::xkb::MOD_NAME_CTRL);
-    if ctrl_index >= u32::BITS {
-        return Err("xkb keymap has no Control modifier".to_string());
+    let modifier_mask = |name| {
+        let index = keymap.mod_get_index(name);
+        if index >= u32::BITS {
+            Err(format!("xkb keymap has no {name} modifier"))
+        } else {
+            Ok(1u32 << index)
+        }
+    };
+    let mut mask = modifier_mask(xkbcommon::xkb::MOD_NAME_CTRL)?;
+    if shortcut == PasteShortcut::CtrlShiftV {
+        mask |= modifier_mask(xkbcommon::xkb::MOD_NAME_SHIFT)?;
     }
-    let ctrl_mask = 1u32 << ctrl_index;
 
     let text = keymap.get_as_string(xkbcommon::xkb::KEYMAP_FORMAT_TEXT_V1);
-    Ok((text, ctrl_mask))
+    Ok((text, mask))
 }
 
 fn create_memfd_with(contents: &[u8]) -> Result<File, String> {
@@ -298,13 +382,87 @@ mod tests {
     use std::io::Read;
 
     #[test]
-    fn default_keymap_compiles_and_exposes_control_modifier() {
-        let (text, ctrl_mask) = compile_keymap_and_ctrl_mask().expect("keymap should compile");
+    fn terminals_use_their_clipboard_paste_shortcut() {
+        for app_id in [
+            "com.system76.CosmicTerm",
+            "Alacritty",
+            "org.alacritty.Alacritty",
+            "kitty",
+            "foot",
+            "footclient",
+            "org.gnome.Terminal",
+            "org.gnome.Console",
+            "org.kde.konsole",
+            "org.wezfurlong.wezterm",
+            "com.mitchellh.ghostty",
+            "xfce4-terminal",
+            "terminator",
+            "com.gexperts.Tilix",
+            "com.raggesilver.BlackBox",
+        ] {
+            assert_eq!(
+                PasteShortcut::for_app_id(Some(app_id)),
+                PasteShortcut::CtrlShiftV,
+                "{app_id}"
+            );
+        }
+    }
 
-        assert!(text.contains("xkb_keymap"));
-        // Standard keymaps declare modifiers as Shift, Lock, Control, Mod1..5,
-        // so Control should sit on the third bit.
-        assert_eq!(ctrl_mask, 1 << 2);
+    #[test]
+    fn other_apps_and_missing_tracking_keep_ctrl_v() {
+        for app_id in [
+            None,
+            Some(""),
+            Some("firefox"),
+            Some("org.gnome.TextEditor"),
+            Some("unknown"),
+            Some("not-com.system76.CosmicTerm"),
+        ] {
+            assert_eq!(
+                PasteShortcut::for_app_id(app_id),
+                PasteShortcut::CtrlV,
+                "{app_id:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn paste_keymap_produces_v_and_the_requested_modifiers() {
+        for (shortcut, expected_mask, expected_keysym) in [
+            (PasteShortcut::CtrlV, 1 << 2, 'v' as u32),
+            (PasteShortcut::CtrlShiftV, (1 << 2) | 1, 'V' as u32),
+        ] {
+            let (text, mask) = compile_paste_keymap(shortcut).expect("keymap should compile");
+            assert_eq!(mask, expected_mask);
+            let context = xkbcommon::xkb::Context::new(xkbcommon::xkb::CONTEXT_NO_FLAGS);
+            let keymap = xkbcommon::xkb::Keymap::new_from_string(
+                &context,
+                text,
+                xkbcommon::xkb::KEYMAP_FORMAT_TEXT_V1,
+                xkbcommon::xkb::KEYMAP_COMPILE_NO_FLAGS,
+            )
+            .expect("uploaded keymap should compile");
+            let mut state = xkbcommon::xkb::State::new(&keymap);
+            for &key in shortcut.modifier_keys() {
+                state.update_key((key + 8).into(), xkbcommon::xkb::KeyDirection::Down);
+            }
+            assert_eq!(
+                state.serialize_mods(xkbcommon::xkb::STATE_MODS_DEPRESSED),
+                mask
+            );
+            state.update_mask(mask, 0, 0, 0, 0, 0);
+            assert_eq!(
+                state.key_get_one_sym((KEY_V + 8).into()).raw(),
+                expected_keysym
+            );
+            for &key in shortcut.modifier_keys().iter().rev() {
+                state.update_key((key + 8).into(), xkbcommon::xkb::KeyDirection::Up);
+            }
+            assert_eq!(
+                state.serialize_mods(xkbcommon::xkb::STATE_MODS_DEPRESSED),
+                0
+            );
+        }
     }
 
     #[test]
@@ -338,5 +496,59 @@ mod tests {
             Some(value) => unsafe { std::env::set_var("CLIPPY_LAND_PASTE_DELAY_MS", value) },
             None => unsafe { std::env::remove_var("CLIPPY_LAND_PASTE_DELAY_MS") },
         }
+    }
+
+    /// Focus a dedicated sink (e.g. `cat > /tmp/clippy-paste-output`) first.
+    /// Set CLIPPY_LAND_LIVE_PASTE=1, CLIPPY_LAND_LIVE_PASTE_APP_ID to its app ID,
+    /// CLIPPY_LAND_LIVE_PASTE_TEXT to the payload (ending in a newline for cat),
+    /// and CLIPPY_LAND_LIVE_PASTE_OUTPUT to the empty sink file's path. Verifies
+    /// two successive pastes through the same cached virtual-keyboard client.
+    #[tokio::test]
+    #[ignore = "requires a live Wayland session and a dedicated focused text sink"]
+    async fn live_paste_into_focused_window() {
+        // `just test-wayland` runs all ignored tests. Never inject input unless
+        // this destructive UI test was explicitly enabled for a prepared sink.
+        if std::env::var_os("CLIPPY_LAND_LIVE_PASTE").is_none() {
+            return;
+        }
+        let tracker = super::super::toplevel::Tracker::started();
+        let expected_app_id =
+            std::env::var("CLIPPY_LAND_LIVE_PASTE_APP_ID").expect("set expected sink app ID");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let snapshot = tracker.snapshot().expect("tracker should be ready");
+        assert_eq!(
+            snapshot.focused_app_id.as_deref(),
+            Some(expected_app_id.as_str())
+        );
+        let text = std::env::var("CLIPPY_LAND_LIVE_PASTE_TEXT").expect("set live paste payload");
+        let output = std::env::var("CLIPPY_LAND_LIVE_PASTE_OUTPUT").expect("set sink output path");
+        assert!(
+            std::fs::read(&output)
+                .expect("sink must already exist")
+                .is_empty(),
+            "sink must start empty"
+        );
+        assert!(super::super::clipboard::write_clipboard_text(&text));
+        tokio::time::sleep(paste_delay()).await;
+        for _ in 0..2 {
+            let tracker = tracker.clone();
+            tokio::task::spawn_blocking(move || send_paste(&tracker))
+                .await
+                .unwrap()
+                .expect("paste should succeed");
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let expected = text.repeat(2);
+        // Submission alone does not prove a paste. Keep the source alive and
+        // compare the receiving sink's actual bytes, detecting missing/wrong
+        // shortcuts, duplicate input, and accidental newline transformations.
+        for _ in 0..40 {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            if std::fs::read(&output).unwrap_or_default() == expected.as_bytes() {
+                break;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(std::fs::read(&output).unwrap(), expected.as_bytes());
     }
 }

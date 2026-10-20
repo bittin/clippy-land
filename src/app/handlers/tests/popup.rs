@@ -42,6 +42,53 @@ fn popup_closed_ignores_mismatched_id() {
 }
 
 #[test]
+fn entry_paste_waits_for_matching_popup_close_acknowledgement() {
+    let mut app = AppModel::default();
+    app.settings.paste_on_action = true;
+    app.settings.close_popup_on_action = true;
+    app.history.push_back(text_item("deferred paste", false));
+    let id = cosmic::iced::window::Id::unique();
+    app.popup = Some(id);
+    app.popup_surface = Some(PopupSurface::LayerSurface);
+
+    dispatch(&mut app, Message::CopyFromHistory(0));
+    assert!(app.popup.is_none());
+    assert_eq!(
+        app.pending_paste.as_ref().map(|(popup, _)| *popup),
+        Some(id)
+    );
+    dispatch(
+        &mut app,
+        Message::PopupClosed(cosmic::iced::window::Id::unique()),
+    );
+    assert!(app.pending_paste.is_some());
+    dispatch(&mut app, Message::PopupClosed(id));
+    assert!(app.pending_paste.is_none());
+}
+
+#[test]
+fn reopening_popup_cancels_paste_waiting_for_old_popup_to_close() {
+    let mut app = AppModel::default();
+    app.settings.paste_on_action = true;
+    app.settings.close_popup_on_action = true;
+    app.history
+        .push_back(text_item("must not paste into the new popup", false));
+    let id = cosmic::iced::window::Id::unique();
+    app.popup = Some(id);
+    app.popup_surface = Some(PopupSurface::LayerSurface);
+    dispatch(&mut app, Message::CopyFromHistory(0));
+    dispatch(&mut app, Message::ToggleViaIpc);
+    let new_popup = app.popup.expect("new popup should be open");
+    assert!(
+        app.pending_paste.is_none(),
+        "reopening must cancel immediately"
+    );
+    dispatch(&mut app, Message::PopupClosed(id));
+    assert!(app.pending_paste.is_none());
+    assert_eq!(app.popup, Some(new_popup));
+}
+
+#[test]
 fn popup_open_trace_starts_on_open_and_clears_after_first_view() {
     let mut app = AppModel::default();
     app.history.push_back(text_item("row", false));

@@ -182,7 +182,7 @@ fn activate_entry(app: &mut AppModel, index: usize) -> Task<cosmic::Action<Messa
         return Task::none();
     };
 
-    let copy_task = history::copy_history_item(item, paste_after_copy);
-    let close_task = super::popup::close_after_action(app);
-    close_task.chain(copy_task)
+    let copy_task =
+        history::copy_history_item(item, paste_after_copy, app.toplevel_tracker.clone());
+    super::popup::close_after_action(app, copy_task, paste_after_copy)
 }

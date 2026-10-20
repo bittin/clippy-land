@@ -149,9 +149,16 @@ pub(super) fn handle(
             let paste_after_copy =
                 app.settings.paste_on_action && app.settings.close_popup_on_action;
             if let Some(item) = app.history.get(index) {
-                let copy_task = history::copy_history_item(item, paste_after_copy);
-                let close_task = super::popup::close_after_action(app);
-                return Some(close_task.chain(copy_task));
+                let copy_task = history::copy_history_item(
+                    item,
+                    paste_after_copy,
+                    app.toplevel_tracker.clone(),
+                );
+                return Some(super::popup::close_after_action(
+                    app,
+                    copy_task,
+                    paste_after_copy,
+                ));
             }
             Some(Task::none())
         }

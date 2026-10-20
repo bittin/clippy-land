@@ -125,6 +125,17 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.1.2" date="2026-10-21">
+      <url type="details">https://github.com/k33wee/clippy-land/releases/tag/v1.1.2</url>
+      <description>
+        <p>Fix automatic paste into terminals and terminal-based nvim without typing clipboard text as raw keystrokes.</p>
+        <ul>
+          <li>Use Ctrl+Shift+V for recognized terminals and Ctrl+V for other apps.</li>
+          <li>Wait for popup closure before copying and pasting, and cancel queued pastes when the popup is reopened.</li>
+          <li>Fix virtual-keyboard modifier handling and track the latest focused app reliably.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.1.1" date="2026-10-11">
       <url type="details">https://github.com/k33wee/clippy-land/releases/tag/v1.1.1</url>
       <description>

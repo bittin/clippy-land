@@ -21,7 +21,6 @@
       Kliknutím na ikonu v panelu můžete procházet, znovu kopírovat, připínat nebo mazat položky schránky, aniž byste museli přerušit svou práci.
       Poznámka: Tento applet funguje pouze v prostředí COSMIC™.
     </p>
-    </p>
     <p xml:lang="pl">
       Clippy Land jest appletem dla panelu COSMIC, który zachowuje historię poprzednio skopiowanych tekstów i obrazów.
       Kliknij w ikonę na panelu by przeglądać, ponownie kopiować, przypinać lub usuwać pozycje nie przerywając pracy.
@@ -44,36 +43,23 @@
       </li>
       <li xml:lang="pl">Przypnij ważne pozycje na samej górze historii (konfigurowalny limit przypiętych pozycji, trwający mimo restartów aplikacji)</li>
       <li>
-        In-popup <b>Settings</b> panel to adjust limits and apply them immediately:
-        <ul>
-          <li>max history entries</li>
-          <li>max pinned entries</li>
-          <li>max image byte size</li>
-          <li>max image dimensions</li>
-        </ul>
+        In-popup Settings panel to adjust limits and apply them immediately:
+        max history entries, max pinned entries, max image byte size, and max image dimensions.
       </li>
       <li xml:lang="pl">W ustawieniach wyskakującego okna można dostosować limity: maksymalnych liczby pozycji w historii, przypiętych pozycji, bitów obrazów i ich wymiarów</li>
       <li>
-        Smooth row behavior for text and image entries:
-        <ul>
-          <li>
-            text rows stay collapsed in-list and expose a lens button for a large full-text preview overlay inside the popup
-          </li>
-          <li>image previews keep a fixed size and centered row actions for stable targeting</li>
-        </ul>
+        Smooth row behavior for text and image entries: text rows stay collapsed in-list
+        and expose a lens button for a large full-text preview overlay inside the popup;
+        image previews keep a fixed size and centered row actions for stable targeting.
       </li>
       <li xml:lang="pl">Inteligentnie dostosowuje się do wielkości apletu tekst i obrazy. Tekst po naciśnięciu ikony lupy pokazuje się w całości, a obrazy zawsze są dostępne w podobnym miejscu.</li>
       <li>
-        Move between entries with keyboard ( <b>up/down</b> or <b>k/j</b> to navigate rows; <b>left/right</b> or <b>h/l</b> to move between row actions: copy, preview (when available), pin, delete)
+        Move between entries with keyboard (up/down or k/j to navigate rows; left/right or h/l to move between row actions: copy, preview (when available), pin, delete)
       </li>
       <li xml:lang="pl">Poruszaj się pomiędzy pozycjami przy pomocy klawiatury (góra/dół lub k/j pomiędzy wierszami, lewy/prawy lub h/l między akcjami: kopiuj, podgląd, przypnij, usuń)</li>
       <li>
-        Keyboard activation and escape behavior:
-        <ul>
-          <li>press <b>Enter</b> on the focused action (including text preview lens)</li>
-          <li>press <b>Q</b> to close the text preview overlay</li>
-          <li>press <b>Esc</b> to close the popup</li>
-        </ul>
+        Keyboard activation and escape behavior: press Enter on the focused action
+        (including text preview lens), Q to close the text preview overlay, and Esc to close the popup.
       </li>
       <li xml:lang="pl">Aktywacja klawiaturą i wyjście z interakcji: Enter by wykonać akcję, Q by wyjść z podglądy i Esc by zamkąć wyskakujące okno</li>
     </ul>
@@ -139,6 +125,43 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.1.2" date="2026-10-21">
+      <url type="details">https://github.com/k33wee/clippy-land/releases/tag/v1.1.2</url>
+      <description>
+        <p>Fix automatic paste into terminals and terminal-based nvim without typing clipboard text as raw keystrokes.</p>
+        <ul>
+          <li>Use Ctrl+Shift+V for recognized terminals and Ctrl+V for other apps.</li>
+          <li>Wait for popup closure before copying and pasting, and cancel queued pastes when the popup is reopened.</li>
+          <li>Fix virtual-keyboard modifier handling and track the latest focused app reliably.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.1.1" date="2026-10-11">
+      <url type="details">https://github.com/k33wee/clippy-land/releases/tag/v1.1.1</url>
+      <description>
+        <p>Flatpak applets can now use focused-window popup placement and automatic paste when launched by a supporting COSMIC Panel.</p>
+        <ul>
+          <li>Share the panel-granted Wayland connection for clipboard capture and publishing, window tracking, and virtual-keyboard paste.</li>
+          <li>Retain graceful fallbacks when privileged access or required protocols are unavailable.</li>
+          <li>Fix Flatpak D-Bus ownership permissions for the keyboard shortcut.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.1.0" date="2026-10-11">
+      <url type="details">https://github.com/k33wee/clippy-land/releases/tag/v1.1.0</url>
+      <description>
+        <p>
+          - Popup now opens near the focused window;
+          - Enter or click pastes the selected entry and closes the popup (virtual-keyboard injection, falls back to copy-only when unavailable);
+          - Clipboard changes are watched via Wayland events instead of polling;
+          - Toggle uses session D-Bus instead of a polled file, greatly reducing idle CPU;
+          - Hardened clipboard watcher: bounded transfers, MIME-type fallback, primary-selection cleanup;
+          - Preview no longer bleeds text behind frosted glass;
+          - Frosted glass support via dependency updates;
+          - Polish translation and metainfo improvements;
+        </p>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-06-25">
       <url type="details">https://github.com/k33wee/clippy-land/releases/tag/v1.0.0</url>
       <description>

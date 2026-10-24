@@ -142,8 +142,23 @@ pub(super) fn handle(
             Some(Task::none())
         }
         Message::CopyFromHistory(index) => {
+            if app.popup.is_none() {
+                return Some(Task::none());
+            }
+
+            let paste_after_copy =
+                app.settings.paste_on_action && app.settings.close_popup_on_action;
             if let Some(item) = app.history.get(index) {
-                return Some(history::copy_history_item(item));
+                let copy_task = history::copy_history_item(
+                    item,
+                    paste_after_copy,
+                    app.toplevel_tracker.clone(),
+                );
+                return Some(super::popup::close_after_action(
+                    app,
+                    copy_task,
+                    paste_after_copy,
+                ));
             }
             Some(Task::none())
         }

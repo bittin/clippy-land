@@ -13,7 +13,7 @@ history only when the clipboard contents change.
 ## Main features
 
 - Keep a history of recent clipboard entries (text + images), with configurable limits
-- Re-copy an entry with a single click
+- Copy an entry with a single click or Enter, optionally paste it into the previously focused app, and auto-close the popup
 - Remove individual entries from the history
 - Clear unpinned history entries with one click while keeping pinned entries saved
 - Pin important entries to the top of the history; pinned entries persist across app restarts (configurable pin limit)
@@ -22,12 +22,15 @@ history only when the clipboard contents change.
   - max pinned entries
   - max image byte size
   - max image dimensions
+  - paste into the active app after selection
+  - close the popup after selection
 - Smooth row behavior for text and image entries:
   - text rows stay collapsed in-list and expose a lens button for a large full-text preview overlay inside the popup
   - image previews keep a fixed size and centered row actions for stable targeting
 - Move between entries with keyboard ( **up/down** or **k/j** to navigate rows; **left/right** or **h/l** to move between row actions: copy, preview (when available), pin, delete)
 - Keyboard activation and escape behavior:
-  - press **Enter** on the focused action (including text preview lens)
+  - press **Enter** on an entry to copy it and, by default, paste it into the previously focused app
+  - press **Enter** on the focused row action (including text preview lens) to activate that action
   - while the text preview overlay is open, use **up/down** or **k/j** to scroll it
   - press **Q** to close the text preview overlay
   - press **Esc** to close the popup
@@ -74,7 +77,7 @@ Go to **COSMIC Settings → Keyboard → Custom Shortcuts**, add a new shortcut 
 - **Command:** `cosmic-applet-clippy-land --toggle` (or `flatpak run io.github.k33wee.clippy-land --toggle` if installed via Flatpak)
 - **Shortcut:** your preferred key combo (e.g. `Super+V`)
 
-> **Note:** Due to a current limitation in the COSMIC panel, opening a popup without a pointer event (i.e. without actually clicking the applet icon) is not natively supported. As a workaround, `--toggle` opens the history as a full-width layer surface anchored to the top of the screen rather than as the usual dropdown under the icon. This is a known limitation and may be improved in the future once COSMIC panel exposes a proper API for this.
+> **Note:** Due to a current limitation in the COSMIC panel, opening a popup without a pointer event (i.e. without actually clicking the applet icon) is not natively supported. As a workaround, `--toggle` opens the history as a layer surface rather than as the usual dropdown under the icon. When the focused window is known (via the `cosmic-toplevel-info` protocol), the visible popup appears near the center of that window, including when hosted by COSMIC Panel. Opposing layer-shell anchors and output-relative margins keep the actual surface near that window while working around the panel proxy's configure limitation. Otherwise it falls back to the top strip on the **active monitor** (the compositor tracks which output you are working on, even with no windows open). The desktop entry requests privileged compositor access with `X-HostWaylandDisplay=true`. When launched by a supporting COSMIC Panel, native and Flatpak applets share its granted connection for clipboard capture/publishing, focused-window tracking, and auto-paste. If that connection or the required protocols are unavailable (including a direct sandbox launch), the applet keeps the active-monitor placement fallback.
 
 For local development, the binary also supports:
 
@@ -91,15 +94,23 @@ Settings are validated before apply/save. Current allowed ranges are:
 - `max_pinned`: `0..=500` and must be `<= max_history`
 - `max_image_bytes`: `262144..=67108864`
 - `max_image_dimension_px`: `512..=16384`
+- `paste_on_action`: paste an activated entry with Ctrl+V, or Ctrl+Shift+V in recognized terminals
+- `close_popup_on_action`: close the popup after activating an entry
 
 By default, Clippy Land starts with:
 
+- `paste_on_action = true`
+- `close_popup_on_action = true`
 - `max_history = 200`
 - `max_pinned = 20`
 - `max_image_bytes = 8 MiB`
 - `max_image_dimension_px = 8192`
 
 Config is stored at `~/.config/clippy-land/config.toml` (or `$XDG_CONFIG_HOME/clippy-land/config.toml`), and can be overridden with `CLIPPY_LAND_CONFIG`.
+
+Auto-paste uses Ctrl+V for normal apps and Ctrl+Shift+V for recognized terminals (including COSMIC Terminal), selected from the focused window's app ID after closing the popup. This lets the terminal handle clipboard/bracketed paste into shells and nvim, rather than typing clipboard text as keystrokes. Unknown app IDs or unavailable toplevel tracking retain Ctrl+V; custom terminal keybindings may require manual paste. `wl-paste` only reads the clipboard and cannot paste into another window.
+
+Auto-paste requires the compositor to expose the `zwp_virtual_keyboard_v1` Wayland protocol. If virtual-keyboard access is unavailable, Clippy Land still copies the entry and closes the popup, but does not inject a paste shortcut. COSMIC restricts this protocol on ordinary sandbox connections, but permits the privileged connection granted to panel applets. The grant is applet-level access, not a per-protocol permission dialog; no additional broad filesystem permission is needed. Without it, Flatpak installations retain the copy-only fallback.
 
 Pinned clipboard entries are stored separately as app state so they survive app restarts and reboots. Only pinned entries are persisted; unpinned clipboard history remains runtime-only. Text pins are saved in a small TOML manifest, while pinned images store metadata in the manifest and image/thumbnail blobs beside it. By default, pinned history is stored at `$XDG_STATE_HOME/clippy-land/pinned-history.toml` or `~/.local/state/clippy-land/pinned-history.toml`, and can be overridden with `CLIPPY_LAND_PINNED_HISTORY`.
 

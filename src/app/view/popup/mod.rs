@@ -2,7 +2,7 @@ mod overlay;
 mod settings;
 
 use super::row::{RowContent, RowRenderState, history_row};
-use super::style::{container_on_svg_style, transparent_icon_button_style};
+use super::style::{container_on_svg_style, layer_popup_style, transparent_icon_button_style};
 use super::summary::text_overlay_available;
 use crate::app::{AppModel, Message, icons};
 use crate::fl;
@@ -81,8 +81,14 @@ pub(super) fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
     let mut content = widget::column::Column::new().spacing(8).padding([8, 8]);
 
     if app.settings_open {
-        let settings_form = settings::settings_panel(app);
-        content = content.push(widget::container(settings_form).padding([0, 12]));
+        let settings_form = widget::scrollable(
+            widget::container(settings::settings_panel(app))
+                .padding([0, 12])
+                .width(Length::Fill),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill);
+        content = content.push(settings_form);
     } else {
         if !app.history.is_empty() {
             content = content.push(search_bar);
@@ -166,7 +172,26 @@ pub(super) fn view_window(app: &AppModel, _id: Id) -> Element<'_, Message> {
 
     app.note_popup_view_built(visible.len(), visible_image_count, build_started.elapsed());
 
-    app.core.applet.popup_container(content).into()
+    if app.popup_surface == Some(crate::app::model::PopupSurface::LayerSurface) {
+        // The applet popup helper would resize the entire layer to its child.
+        // Keep compositor-chosen layer geometry intact instead.
+        let width = app
+            .toggle_popup_placement
+            .unwrap_or(crate::app::surfaces::TogglePopupPlacement::ActiveMonitorStrip)
+            .content_width();
+        let popup = widget::container(content)
+            .class(cosmic::theme::Container::custom(layer_popup_style))
+            .width(Length::Fixed(width as f32))
+            .height(Length::Shrink);
+        widget::container(popup)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .align_x(Alignment::Start)
+            .align_y(Alignment::Start)
+            .into()
+    } else {
+        app.core.applet.popup_container(content).into()
+    }
 }
 
 fn count_visible_images(app: &AppModel, visible: &[usize]) -> usize {

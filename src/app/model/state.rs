@@ -20,6 +20,11 @@ pub struct AppModel {
     pub(in crate::app) settings: AppSettings,
     pub(in crate::app) popup: Option<Id>,
     pub(in crate::app) popup_surface: Option<PopupSurface>,
+    /// Copy/paste work held until the backend confirms this popup was destroyed.
+    pub(in crate::app) pending_paste:
+        Option<(Id, cosmic::iced::Task<cosmic::Action<crate::app::Message>>)>,
+    /// Placement captured when toggled, so subsequent focus changes cannot move it.
+    pub(in crate::app) toggle_popup_placement: Option<crate::app::surfaces::TogglePopupPlacement>,
     /// False during initial popup mapping so non-essential footer controls can be revealed
     /// only after the popup has actually opened.
     pub(in crate::app) popup_controls_ready: bool,
@@ -60,6 +65,8 @@ pub struct AppModel {
     pub(in crate::app) text_overlay_index: Option<usize>,
     /// Pending timing trace for popup open diagnostics.
     pub(in crate::app) popup_open_trace: RefCell<Option<PopupOpenTrace>>,
+    /// Background focused-toplevel tracker used to place the toggle popup.
+    pub(in crate::app) toplevel_tracker: crate::services::toplevel::Tracker,
 }
 
 #[derive(Debug, Clone, Default)]

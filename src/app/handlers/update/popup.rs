@@ -31,6 +31,21 @@ pub(super) fn handle(
             if app.popup.as_ref() == Some(&id) {
                 clear_popup_state(app, "popup closed before first redraw");
             }
+            if app
+                .pending_paste
+                .as_ref()
+                .is_some_and(|(popup, _)| *popup == id)
+            {
+                let (_, copy_task) = app
+                    .pending_paste
+                    .take()
+                    .expect("pending paste checked above");
+                // A newly opened popup must not receive a paste intended for
+                // the app behind the old one.
+                if app.popup.is_none() {
+                    return Some(copy_task);
+                }
+            }
             Some(Task::none())
         }
         _ => None,
@@ -70,6 +85,24 @@ fn open_anchored_popup(app: &mut AppModel) -> Task<cosmic::Action<Message>> {
     crate::app::surfaces::open_anchored_popup(app)
 }
 
+pub(super) fn close_after_action(
+    app: &mut AppModel,
+    copy_task: Task<cosmic::Action<Message>>,
+    paste_after_copy: bool,
+) -> Task<cosmic::Action<Message>> {
+    if app.settings.close_popup_on_action {
+        if paste_after_copy && let Some(id) = app.popup {
+            // Issuing destroy is not an acknowledgement. Wait for the
+            // backend's PopupClosed event before starting the paste delay.
+            app.pending_paste = Some((id, copy_task));
+            return close_popup(app, "entry action closed popup before first redraw");
+        }
+        close_popup(app, "entry action closed popup before first redraw").chain(copy_task)
+    } else {
+        copy_task
+    }
+}
+
 fn close_popup(app: &mut AppModel, reason: &'static str) -> Task<cosmic::Action<Message>> {
     let Some(id) = app.popup.take() else {
         return Task::none();
@@ -85,6 +118,7 @@ fn close_popup(app: &mut AppModel, reason: &'static str) -> Task<cosmic::Action<
 fn clear_popup_state(app: &mut AppModel, reason: &'static str) {
     app.popup = None;
     app.popup_surface = None;
+    app.toggle_popup_placement = None;
     app.popup_controls_ready = false;
     app.search_query.clear();
     app.settings_open = false;

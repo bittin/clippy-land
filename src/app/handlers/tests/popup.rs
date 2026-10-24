@@ -7,6 +7,8 @@ fn popup_closed_clears_popup_and_search() {
     let id = cosmic::iced::window::Id::unique();
     app.popup = Some(id);
     app.popup_surface = Some(PopupSurface::AnchoredPopup);
+    app.toggle_popup_placement =
+        Some(crate::app::surfaces::TogglePopupPlacement::ActiveMonitorStrip);
     app.popup_controls_ready = true;
     app.search_query = "hello".into();
     app.hovered_index = Some(1);
@@ -16,6 +18,7 @@ fn popup_closed_clears_popup_and_search() {
 
     assert!(app.popup.is_none());
     assert!(app.popup_surface.is_none());
+    assert!(app.toggle_popup_placement.is_none());
     assert!(!app.popup_controls_ready);
     assert!(app.search_query.is_empty());
     assert!(app.hovered_index.is_none());
@@ -36,6 +39,53 @@ fn popup_closed_ignores_mismatched_id() {
     assert_eq!(app.popup, Some(real_id));
     assert_eq!(app.popup_surface, Some(PopupSurface::AnchoredPopup));
     assert_eq!(app.search_query, "query");
+}
+
+#[test]
+fn entry_paste_waits_for_matching_popup_close_acknowledgement() {
+    let mut app = AppModel::default();
+    app.settings.paste_on_action = true;
+    app.settings.close_popup_on_action = true;
+    app.history.push_back(text_item("deferred paste", false));
+    let id = cosmic::iced::window::Id::unique();
+    app.popup = Some(id);
+    app.popup_surface = Some(PopupSurface::LayerSurface);
+
+    dispatch(&mut app, Message::CopyFromHistory(0));
+    assert!(app.popup.is_none());
+    assert_eq!(
+        app.pending_paste.as_ref().map(|(popup, _)| *popup),
+        Some(id)
+    );
+    dispatch(
+        &mut app,
+        Message::PopupClosed(cosmic::iced::window::Id::unique()),
+    );
+    assert!(app.pending_paste.is_some());
+    dispatch(&mut app, Message::PopupClosed(id));
+    assert!(app.pending_paste.is_none());
+}
+
+#[test]
+fn reopening_popup_cancels_paste_waiting_for_old_popup_to_close() {
+    let mut app = AppModel::default();
+    app.settings.paste_on_action = true;
+    app.settings.close_popup_on_action = true;
+    app.history
+        .push_back(text_item("must not paste into the new popup", false));
+    let id = cosmic::iced::window::Id::unique();
+    app.popup = Some(id);
+    app.popup_surface = Some(PopupSurface::LayerSurface);
+    dispatch(&mut app, Message::CopyFromHistory(0));
+    dispatch(&mut app, Message::ToggleViaIpc);
+    let new_popup = app.popup.expect("new popup should be open");
+    assert!(
+        app.pending_paste.is_none(),
+        "reopening must cancel immediately"
+    );
+    dispatch(&mut app, Message::PopupClosed(id));
+    assert!(app.pending_paste.is_none());
+    assert_eq!(app.popup, Some(new_popup));
 }
 
 #[test]
@@ -121,8 +171,47 @@ fn toggle_via_ipc_opens_layer_surface_popup_and_starts_trace() {
 
     assert!(app.popup.is_some());
     assert_eq!(app.popup_surface, Some(PopupSurface::LayerSurface));
+    assert_eq!(
+        app.toggle_popup_placement,
+        Some(crate::app::surfaces::TogglePopupPlacement::ActiveMonitorStrip)
+    );
     assert!(!app.popup_controls_ready);
     assert!(app.popup_open_trace_pending_for_test());
+}
+
+#[test]
+fn layer_popup_view_fills_its_configured_surface_without_autosizing() {
+    let mut app = AppModel::default();
+    let popup_id = cosmic::iced::window::Id::unique();
+    app.popup = Some(popup_id);
+    app.popup_surface = Some(PopupSurface::LayerSurface);
+    app.toggle_popup_placement = Some(
+        crate::app::surfaces::TogglePopupPlacement::NearFocusedWindow {
+            rect: crate::services::toplevel::WindowRect {
+                x: 1923,
+                y: 613,
+                width: 560,
+                height: 400,
+            },
+            right_margin: 269,
+        },
+    );
+
+    let popup = view::view_window(&app, popup_id);
+    assert_eq!(
+        popup.as_widget().size(),
+        cosmic::iced::Size::new(cosmic::iced::Length::Fill, cosmic::iced::Length::Fill)
+    );
+}
+
+#[test]
+fn anchored_popup_does_not_reuse_toggle_placement() {
+    let mut app = AppModel::default();
+    app.toggle_popup_placement =
+        Some(crate::app::surfaces::TogglePopupPlacement::ActiveMonitorStrip);
+    dispatch(&mut app, Message::TogglePopup);
+    assert_eq!(app.popup_surface, Some(PopupSurface::AnchoredPopup));
+    assert!(app.toggle_popup_placement.is_none());
 }
 
 #[test]

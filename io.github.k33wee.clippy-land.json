@@ -14,7 +14,6 @@
     "--filesystem=/run/user",
     "--filesystem=xdg-config/cosmic:rw",
     "--own-name=io.github.k33wee.ClippyLand",
-    "--talk-name=io.github.k33wee.ClippyLand",
     "--talk-name=com.system76.CosmicSettingsDaemon"
   ],
   "build-options": {
@@ -43,8 +42,8 @@
         {
           "type": "git",
           "url": "https://github.com/k33wee/clippy-land.git",
-          "tag": "v1.0.0",
-          "commit": "f71c4aab068715e077c711fc597b75f9fb2f4633"
+          "tag": "v1.1.2",
+          "commit": "74e883b6bb7b37e45cb700f8036d93bd2fe3b96e"
         },
         "cargo-sources.json"
       ]

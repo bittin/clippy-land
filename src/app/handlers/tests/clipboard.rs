@@ -40,6 +40,33 @@ fn clipboard_changed_dedupes_and_preserves_pin_state() {
 }
 
 #[test]
+fn text_only_capture_ignores_late_images_without_changing_existing_history() {
+    let mut app = AppModel::default();
+    app.settings.capture_images = false;
+    app.history.push_back(HistoryItem {
+        entry: image_entry(42),
+        pinned: true,
+    });
+    app.history.push_back(text_item("keep this text", false));
+
+    dispatch(&mut app, Message::ClipboardChanged(image_entry(99)));
+    dispatch(&mut app, Message::ClipboardChanged(image_entry(42)));
+    assert_eq!(app.history.len(), 2);
+    assert!(app.history[0].pinned);
+    assert_eq!(app.history[0].entry, image_entry(42));
+    assert!(app.thumbnail_handles.is_empty());
+
+    dispatch(&mut app, Message::ClipboardChanged(text_entry("new text")));
+    assert_eq!(app.history.len(), 3);
+    assert_eq!(app.history[1].entry, text_entry("new text"));
+
+    app.settings.capture_images = true;
+    dispatch(&mut app, Message::ClipboardChanged(image_entry(99)));
+    assert_eq!(app.history.len(), 4);
+    assert_eq!(app.history[1].entry, image_entry(99));
+}
+
+#[test]
 fn clipboard_changed_caches_and_prunes_thumbnail_handles() {
     let mut app = AppModel::default();
 
@@ -75,10 +102,15 @@ fn thumbnail_result_updates_only_the_matching_image() {
                 height: 1,
                 rgba: vec![255, 0, 0, 255].into(),
                 png: vec![137, 80, 78, 71].into(),
+                source_dimensions: (1920, 1080),
             }),
         },
     );
 
+    assert_eq!(
+        app.image_dimensions.get(&(42, 4)),
+        Some(&Some((1920, 1080)))
+    );
     assert!(!app.pending_thumbnails.contains(&(42, 4)));
     assert!(app.thumbnail_handles.contains_key(&(42, 4)));
     match &app.history[0].entry {
@@ -104,6 +136,7 @@ fn stale_thumbnail_result_is_discarded() {
                 height: 1,
                 rgba: vec![255, 0, 0, 255].into(),
                 png: vec![137, 80, 78, 71].into(),
+                source_dimensions: (1920, 1080),
             }),
         },
     );
@@ -231,20 +264,21 @@ fn open_text_overlay_sets_overlay_index_for_text_entry() {
     app.history
         .push_back(text_item("first line\nsecond line", false));
 
-    dispatch(&mut app, Message::OpenTextOverlay(0));
+    dispatch(&mut app, Message::OpenPreview(0));
 
     assert_eq!(app.text_overlay_index, Some(0));
 }
 
 #[test]
-fn open_text_overlay_ignores_image_entries() {
+fn open_preview_uses_image_state_for_image_entries() {
     let mut app = AppModel::default();
     app.history.push_back(HistoryItem {
         entry: image_entry(9),
         pinned: false,
     });
 
-    dispatch(&mut app, Message::OpenTextOverlay(0));
+    dispatch(&mut app, Message::OpenPreview(0));
 
     assert!(app.text_overlay_index.is_none());
+    assert!(app.image_preview.is_some());
 }

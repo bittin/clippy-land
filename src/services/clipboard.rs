@@ -8,16 +8,25 @@ mod watcher;
 #[cfg(test)]
 mod tests;
 
-pub use model::{ClipboardEntry, ClipboardFingerprint, ClipboardThumbnail};
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+pub use model::{ClipboardEntry, ClipboardFingerprint, ClipboardPreview, ClipboardThumbnail};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
 const DEFAULT_MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 const THUMBNAIL_SIZE_PX: u32 = 400;
 const MAX_FULL_FRAME_THUMBNAIL_BYTES: u64 = 64 * 1024 * 1024;
 const DEFAULT_MAX_IMAGE_DIMENSION_PX: u32 = 8192;
 
+static CAPTURE_IMAGES: AtomicBool = AtomicBool::new(true);
 static MAX_IMAGE_BYTES: AtomicUsize = AtomicUsize::new(DEFAULT_MAX_IMAGE_BYTES);
 static MAX_IMAGE_DIMENSION_PX: AtomicU32 = AtomicU32::new(DEFAULT_MAX_IMAGE_DIMENSION_PX);
+
+pub fn configure_image_capture(enabled: bool) {
+    CAPTURE_IMAGES.store(enabled, Ordering::Relaxed);
+}
+
+pub(super) fn capture_images() -> bool {
+    CAPTURE_IMAGES.load(Ordering::Relaxed)
+}
 
 pub fn configure_limits(max_image_bytes: usize, max_image_dimension_px: u32) {
     MAX_IMAGE_BYTES.store(max_image_bytes, Ordering::Relaxed);
@@ -67,6 +76,18 @@ pub fn watch_clipboard(sender: tokio::sync::mpsc::Sender<ClipboardEntry>) {
 
 pub fn make_thumbnail(mime: &str, bytes: &bytes::Bytes) -> Option<ClipboardThumbnail> {
     image::make_thumbnail(mime, bytes)
+}
+
+pub fn make_preview(
+    mime: &str,
+    bytes: &bytes::Bytes,
+    cancelled: impl Fn() -> bool,
+) -> Option<ClipboardPreview> {
+    image::make_image_preview(mime, bytes, 1600, &cancelled)
+}
+
+pub fn image_dimensions(mime: &str, bytes: &[u8]) -> Option<(u32, u32)> {
+    image::image_dimensions(mime, bytes)
 }
 
 pub(super) fn debug_log(message: impl std::fmt::Display) {
